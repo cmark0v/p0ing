@@ -45,7 +45,7 @@ def getipinfo(ip):
         return dict()
 
 
-def geoplot(G, ax):
+def geoplot(G, ax,draw_map=True):
     m = basemap.Basemap(
         projection="cyl",
         llcrnrlat=-75,
@@ -56,8 +56,9 @@ def geoplot(G, ax):
         resolution="c",
         ax=ax,
     )
-    m.drawcoastlines(ax=ax,zorder=1)
-    m.drawcountries(ax=ax,zorder=1)
+    if draw_map:
+        m.drawcoastlines(ax=ax,zorder=1)
+        m.drawcountries(ax=ax,zorder=1)
     lons, lats = getgps(G)
     pos = {n: m(lons[i], lats[i]) for i, n in enumerate(G.nodes)}
     return pos

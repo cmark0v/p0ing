@@ -26,6 +26,7 @@ from getflag import getflag
 PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 5))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
+MAP = os.getenv("MAP", "t").lower() in YES  # how often to read buffer and refresh
 
 GEOPLOT = (
     os.getenv("GEOPLOT", "f").lower() in YES
@@ -285,6 +286,15 @@ class tkGraph:
         self.button.place(relx=0.025, rely=0.15)
         self.label_button = ctk.CTkButton(
             master=self.root,
+            text="Map/physical prox cluster",
+            width=200,
+            height=50,
+            command=self.mapflip,
+        )
+        self.label_button.place(relx=0.025, rely=0.15 + 2 * bdiff)
+
+        self.label_button = ctk.CTkButton(
+            master=self.root,
             text="Toggle Node Labels",
             width=200,
             height=50,
@@ -313,6 +323,11 @@ class tkGraph:
         LABELS = LABELS ^ True
         self.update_window()
 
+    def mapflip(self):
+        global MAP
+        MAP = MAP ^ True
+        self.update_window()
+
     def pyvisplot(self):
         pyvisplot(self.G)
 
@@ -323,7 +338,9 @@ class tkGraph:
         N = len(list(self.G.nodes))
         if GEOPLOT:
             self.fig.set_figwidth(12)
-            pos = mapplot.geoplot(self.G, self.ax)
+            pos = mapplot.geoplot(self.G, self.ax, draw_map=MAP)
+            if not MAP:
+                pos = nx.spring_layout(self.G, pos=pos, iterations=5)
         else:
             self.fig.set_size_inches(10, 10)
             # pos = nx.kamada_kawai_layout(self.G)
@@ -371,7 +388,9 @@ class tkGraph:
                 self.G.nodes.get(n).get("image", "icons/icons8-my-computer-100.png")
             )
             flag = PIL.Image.open(self.G.nodes.get(n).get("flag", "flags/xx.png"))
-            xf, yf = tr_figure(pos[n],)
+            xf, yf = tr_figure(
+                pos[n],
+            )
             xa, ya = tr_axes((xf, yf))
             a = plt.axes(
                 [
@@ -381,12 +400,12 @@ class tkGraph:
                     icon_size,
                 ]
             )
-            a.imshow(flag.convert("RGB"),zorder=3)
+            a.imshow(flag.convert("RGB"), zorder=3)
             a.axis("off")
             a = plt.axes(
                 [xa - icon_center, ya + icon_size - icon_center, icon_size, icon_size]
             )
-            a.imshow(icon.convert("RGBA"),zorder=3)
+            a.imshow(icon.convert("RGBA"), zorder=3)
             a.axis("off")
         self.ax.axis("off")
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)
