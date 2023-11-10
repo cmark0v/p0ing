@@ -18,16 +18,18 @@ import sys
 import re
 import ipaddress
 
+YES = ["t", "true", "1", "yes", "y", "on"]
 
 from getflag import getflag
 
 PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 5))  # how often to read buffer and refresh
-COLORBY = os.getenv(
-    "COLORBY", "port"
+LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
+EDGE_COLOR_BY = os.getenv(
+    "EDGE_COLOR_BY", "port"  # dotted foreground of edge
 )  # graph data field to color code edges by in plotting
-TKINT = os.getenv("TKINT", "t").lower() in ["t", "true", "1", "yes", "y"]
-
+EDGE_COLOR_BY_BG = os.getenv("EDGE_COLOR_BY_BG", "group")  # BG of edge
+TKINT = os.getenv("TKINT", "t").lower() in YES
 ipr = os.popen("ip route|grep -v linkdown")
 lines = ipr.readlines()
 ipr.close()
@@ -79,8 +81,8 @@ def upsert(ip, G, **data):
         G.add_node(ip, **data)
         if ipaddress.ip_address(ip) in mynet.hosts() and ip != myip:
             G.nodes.get(ip)["group"] = "arp"
-            edge_upsert(myip, ip, G, group="arp")
-            edge_upsert(ip, myip, G, group="arp")
+            edge_upsert(myip, ip, G, group="arp", dist=1)
+            edge_upsert(ip, myip, G, group="arp", dist=1)
     else:
         for k in data.keys():
             if not node.get(k, False):
@@ -131,8 +133,8 @@ upsert(
     group="arp",
     image=graphviz.geticon(dict(), name="cisco"),
 )
-G.add_edge(myip, gw, group="arp", label="default")
-G.add_edge(gw, myip, group="arp", label="default")
+G.add_edge(myip, gw, group="arp", label="default", dist=1)
+G.add_edge(gw, myip, group="arp", label="default", dist=1)
 arp = os.popen("arp -na -i %s" % (IFACE,))
 arptable = arp.readlines()
 arp.close()
@@ -173,7 +175,7 @@ lastplot = begin
 def pyvisplot(G):
     for e in G.edges:
         G.edges.get((e[0], e[1]))["color"] = hashcolor(
-            G.get_edge_data(e[0], e[1]).get(COLORBY)
+            G.get_edge_data(e[0], e[1]).get(EDGE_COLOR_BY)
         )
     graphviz.plot(G)
 
@@ -238,6 +240,7 @@ def updateG(G):
                     1 / (float(re.sub("[^0-9]", "", gson.get("dist", "1"))) + 1),
                 )
             ),
+            dist=gson.get("dist", "1"),
             mod=mod,
             link=link,
             app=app,
@@ -245,12 +248,15 @@ def updateG(G):
             group="p0f",
         )
         if mod.find("syn+ack") >= 0:
-            edge_upsert(ipTo[0], ipFrom[0], G, mod=mod, link=gson.get("link", ""))
+            edge_upsert(
+                ipTo[0], ipFrom[0], G, mod=mod, link=gson.get("link", ""), group="ack"
+            )
     return G
 
 
 class tkGraph:
     def __init__(self, G):
+        bdiff = 0.1  # distance between buttons as fraction of window height
         self.G = G
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
@@ -271,7 +277,15 @@ class tkGraph:
             height=50,
             command=self.pyvisplot,
         )
-        self.button.place(relx=0.025, rely=0.25)
+        self.button.place(relx=0.025, rely=0.15)
+        self.label_button = ctk.CTkButton(
+            master=self.root,
+            text="Toggle Node Labels",
+            width=200,
+            height=50,
+            command=self.labelflip,
+        )
+        self.label_button.place(relx=0.025, rely=0.15 + 3 * bdiff)
         self.exit_button = ctk.CTkButton(
             master=self.root,
             text="Exit",
@@ -279,7 +293,8 @@ class tkGraph:
             height=50,
             command=self.exit,
         )
-        self.exit_button.place(relx=0.025, rely=0.85)
+        self.exit_button.place(relx=0.025, rely=0.85 + bdiff)
+
         self.fig, self.ax = plt.subplots()
         self.update_window()
         self.after()
@@ -288,6 +303,11 @@ class tkGraph:
     def exit(self):
         p0f.kill()
         exit(0)
+
+    def labelflip(self):
+        global LABELS
+        LABELS = LABELS ^ True
+        self.update_window()
 
     def pyvisplot(self):
         pyvisplot(self.G)
@@ -303,8 +323,8 @@ class tkGraph:
         colors = []
         colors2 = []
         for e in self.G.edges:
-            gv = self.G.get_edge_data(e[0], e[1]).get("link")
-            gv2 = self.G.get_edge_data(e[0], e[1]).get(COLORBY)
+            gv = self.G.get_edge_data(e[0], e[1]).get(EDGE_COLOR_BY_BG)
+            gv2 = self.G.get_edge_data(e[0], e[1]).get(EDGE_COLOR_BY)
             colors.append(hashcolor(gv))
             colors2.append(hashcolor(gv2))
         nx.draw_networkx(
@@ -316,7 +336,7 @@ class tkGraph:
             ax=self.ax,
             arrows=True,
             edge_color=colors,
-            with_labels=True,
+            with_labels=LABELS,  # ip labels
         )
         nx.draw_networkx_edges(
             self.G,

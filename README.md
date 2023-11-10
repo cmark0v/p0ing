@@ -9,18 +9,14 @@ Primarily uses ``p0f``  to collect data and networkx to organize it. visualizati
 requirements
 ------------
 
-```
-geoip-bin
-libpcap-dev
-python3-tk
-```
 
 ```
-networkx
-customtkinter
-numpy
-matplotlib
-pyvis
+apt install geoip-bin libpcap-dev python3-tk
+pip install networkx
+pip install customtkinter
+pip install numpy
+pip install matplotlib
+pip install pyvis
 ```
 
 
