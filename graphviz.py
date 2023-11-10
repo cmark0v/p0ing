@@ -1,8 +1,3 @@
-import matplotlib.pyplot as plt
-import networkx as nx
-from networkx.algorithms.approximation.dominating_set import min_weighted_dominating_set
-import pyvis
-from grave import plot_network
 from pyvis.network import Network
 
 options = {
@@ -78,36 +73,6 @@ def geticon(gson, name="computer", default=False):
                 icon = icons.get(oslist.get(ost))
         return icon
 
-
-def color_dict(attrs, fields={"group"}):
-    lildict = {j: attrs.get(j, False) for j in fields}
-    h = hash(str(lildict.items()))
-    color = "#"
-    for j in range(3):
-        color = color + "%.2x" % ((h >> 8 * j) % 256,)
-    return color
-
-
-def edge_font_styler(attributes):
-    return {
-        "font_size": 4,
-        "font_weight": 0.75,
-        "font_color": color_dict(attributes, fields={"guess"}),
-    }
-
-
-def node_font_styler(attributes):
-    return {
-        "font_size": 4,
-        "font_weight": 0.75,
-    }
-
-
-def plot_grave(network,ax):
-    plot_network(
-        network,
-        ax=ax
-    )
 
 
 def plot(G):
