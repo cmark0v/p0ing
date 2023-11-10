@@ -17,6 +17,7 @@ pip install networkx
 pip install customtkinter
 pip install numpy
 pip install matplotlib
+pip install basemap
 pip install pyvis
 ```
 
