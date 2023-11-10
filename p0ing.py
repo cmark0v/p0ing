@@ -1,3 +1,4 @@
+import mapplot
 import fcntl
 import os
 from subprocess import *
@@ -25,6 +26,10 @@ from getflag import getflag
 PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 5))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
+
+GEOPLOT = (
+    os.getenv("GEOPLOT", "f").lower() in YES
+)  # how often to read buffer and refresh
 EDGE_COLOR_BY = os.getenv(
     "EDGE_COLOR_BY", "port"  # dotted foreground of edge
 )  # graph data field to color code edges by in plotting
@@ -294,7 +299,6 @@ class tkGraph:
             command=self.exit,
         )
         self.exit_button.place(relx=0.025, rely=0.85 + bdiff)
-
         self.fig, self.ax = plt.subplots()
         self.update_window()
         self.after()
@@ -317,9 +321,14 @@ class tkGraph:
         plt.close()
         self.fig, self.ax = plt.subplots()
         N = len(list(self.G.nodes))
-        # pos = nx.kamada_kawai_layout(self.G)
-        pos = nx.multipartite_layout(self.G, subset_key="flag")
-        pos = nx.spring_layout(self.G, pos=pos, iterations=5)
+        if GEOPLOT:
+            self.fig.set_figwidth(12)
+            pos = mapplot.geoplot(self.G, self.ax)
+        else:
+            self.fig.set_size_inches(10, 10)
+            # pos = nx.kamada_kawai_layout(self.G)
+            pos = nx.multipartite_layout(self.G, subset_key="flag")
+            pos = nx.spring_layout(self.G, pos=pos, iterations=5)
         colors = []
         colors2 = []
         for e in self.G.edges:
@@ -352,18 +361,17 @@ class tkGraph:
             [((n1, n2), G.edges.get((n1, n2)).get("port", "")) for n1, n2 in G.edges]
         )
         nx.draw_networkx_edge_labels(G, pos, edge_labels)
-        self.fig.set_size_inches(10, 10)
         tr_figure = self.ax.transData.transform
         # Transform from display to figure coordinates
         tr_axes = self.fig.transFigure.inverted().transform
-        icon_size = (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) * 0.015
+        icon_size = (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) * 0.025
         icon_center = icon_size / 4
         for n in self.G.nodes:
             icon = PIL.Image.open(
                 self.G.nodes.get(n).get("image", "icons/icons8-my-computer-100.png")
             )
             flag = PIL.Image.open(self.G.nodes.get(n).get("flag", "flags/xx.png"))
-            xf, yf = tr_figure(pos[n])
+            xf, yf = tr_figure(pos[n],)
             xa, ya = tr_axes((xf, yf))
             a = plt.axes(
                 [
@@ -373,12 +381,12 @@ class tkGraph:
                     icon_size,
                 ]
             )
-            a.imshow(flag.convert("RGB"))
+            a.imshow(flag.convert("RGB"),zorder=3)
             a.axis("off")
             a = plt.axes(
                 [xa - icon_center, ya + icon_size - icon_center, icon_size, icon_size]
             )
-            a.imshow(icon.convert("RGBA"))
+            a.imshow(icon.convert("RGBA"),zorder=3)
             a.axis("off")
         self.ax.axis("off")
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)

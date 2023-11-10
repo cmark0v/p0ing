@@ -9,9 +9,10 @@ Primarily uses ``p0f``  to collect data and networkx to organize it. visualizati
 requirements
 ------------
 
+this should about cover it. tkinter needs to be installed by apt it seems  
 
 ```
-apt install geoip-bin libpcap-dev python3-tk
+apt install geoip-bin libpcap-dev python3-tk curl build-essential
 pip install networkx
 pip install customtkinter
 pip install numpy
@@ -19,12 +20,21 @@ pip install matplotlib
 pip install pyvis
 ```
 
+build
+-----
+
+``./build.sh`` - inits + updates the submodule for p0f and builds it with its own build script
 
 env vars
 --------
 
 - ``TKINT`` - ``true`` default, show tkinter interface, otherwise just generate pyvis html
-
+- ``EDGE_COLOR_BY_BG`` - background edge(the edges are overlapping 50% transparency and foreground edge is dashed. defaults to ``group``
+- ``EDGE_COLOR_BY``  - color edge by data field ``port, group, app, dist, link, mod`` defaults to ``port``. color is generated from hash of field values
+- ``GEOPLOT``- plot on map? (not totally passive, sends traffic to ipinfo
+- ``REPLOT`` -  time between refresh in seconds
+- ``LABELS`` -  bool plot node labels(ips) in pic
+- ``IPINFOTOKEN`` - ipinfo auth token, can go in .env, only used in geoplot. 
 
 
 Icons
