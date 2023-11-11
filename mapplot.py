@@ -17,7 +17,7 @@ def getgps(G):
         loc = G.nodes.get(e).get("ipinfo_loc", False)
         if not loc:
             info = getipinfo(e)
-            #print(info)
+            # print(info)
             lat, log = info.get("loc", "0,0").split(",")
             for k in info.keys():
                 G.nodes.get(e)["ipinfo_" + k] = info[k]
@@ -45,20 +45,25 @@ def getipinfo(ip):
         return dict()
 
 
-def geoplot(G, ax,draw_map=True):
+def geoplot(G, ax=None, draw_map=True):
     m = basemap.Basemap(
         projection="cyl",
         llcrnrlat=-75,
         urcrnrlat=75,
-        llcrnrlon=-180,
-        urcrnrlon=180,
+        llcrnrlon=-150,
+        urcrnrlon=150,
         lat_ts=20,
         resolution="c",
         ax=ax,
     )
-    if draw_map:
-        m.drawcoastlines(ax=ax,zorder=1)
-        m.drawcountries(ax=ax,zorder=1)
     lons, lats = getgps(G)
     pos = {n: m(lons[i], lats[i]) for i, n in enumerate(G.nodes)}
+    if draw_map:
+        m.drawcoastlines(ax=ax, zorder=1)
+        m.drawcountries(ax=ax, zorder=1)
+        for n in G.nodes:
+            plt.imshow(
+                plt.imread(G.nodes.get(n).get("image")),
+                extent=[pos[n][0], pos[n][0] + 10, pos[n][1], pos[n][1] + 10],
+            )
     return pos
