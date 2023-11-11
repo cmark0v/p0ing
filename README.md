@@ -1,5 +1,8 @@
 ## p0ing
 
+
+![p0ing](icons/p0ing1.png "p0ing graph")
+
 passive online interactive network graph
 
 
@@ -36,6 +39,10 @@ env vars
 - ``REPLOT`` -  time between refresh in seconds
 - ``LABELS`` -  bool plot node labels(ips) in pic
 - ``IPINFOTOKEN`` - ipinfo auth token, can go in .env, only used in geoplot. 
+
+
+![p0ing](icons/p0ing0.png "p0ing graph")
+
 
 
 Icons
