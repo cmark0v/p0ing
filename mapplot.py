@@ -5,9 +5,21 @@ from matplotlib import pyplot as plt
 from mpl_toolkits import basemap
 import numpy as np
 from dotenv import load_dotenv
+import networkx as nx
 
 load_dotenv()
 IPINFOTOKEN = os.getenv("IPINFOTOKEN", "")
+from geopy import distance
+
+
+def mkgeoG(pos):
+    D = nx.Graph()
+    for j in pos.keys():
+        D.add_node(j)
+        for k in D.nodes:
+            D.add_edge(j, k, weight=distance.geodesic(pos[j], pos[k]))
+    pos = nx.spring_layout(G, k=50, iterations=10, weight="weight")
+    return pos
 
 
 def getgps(G):
