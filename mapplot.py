@@ -12,13 +12,15 @@ IPINFOTOKEN = os.getenv("IPINFOTOKEN", "")
 from geopy import distance
 
 
-def mkgeoG(pos):
+def mkgeo_cluster_layout(pos):
+    lons, lats = getgps(G)
+    pos = {n: m(lons[i], lats[i]) for i, n in enumerate(G.nodes)}
     D = nx.Graph()
     for j in pos.keys():
         D.add_node(j)
         for k in D.nodes:
             D.add_edge(j, k, weight=distance.geodesic(pos[j], pos[k]))
-    pos = nx.spring_layout(G, k=50, iterations=10, weight="weight")
+    pos = nx.spring_layout(D, iterations=10, weight="weight")
     return pos
 
 
