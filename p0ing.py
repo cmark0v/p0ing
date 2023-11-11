@@ -24,8 +24,10 @@ YES = ["t", "true", "1", "yes", "y", "on"]
 from getflag import getflag
 
 PLOTX = 0.2
-REPLOT = int(os.getenv("REPLOT", 5))  # how often to read buffer and refresh
+REPLOT = int(os.getenv("REPLOT", 10))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
+
+EDGE_LABELS = os.getenv("EDGE_LABELS", "t").lower() in YES  # how often to read buffer and refresh
 MAP = os.getenv("MAP", "t").lower() in YES  # how often to read buffer and refresh
 
 GEOPLOT = (
@@ -266,7 +268,7 @@ class tkGraph:
         self.G = G
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
-        self.root.geometry("1200x1000+200x200")
+        self.root.geometry("1400x1000+200x200")
         self.root.title("p0ing - passive 0S fingerprinting Interative Network Graph")
         # self.root.update()
         self.frame = ctk.CTkFrame(
@@ -284,14 +286,14 @@ class tkGraph:
             command=self.pyvisplot,
         )
         self.button.place(relx=0.025, rely=0.15)
-        self.label_button = ctk.CTkButton(
+        self.map_button = ctk.CTkButton(
             master=self.root,
             text="Map/physical prox cluster",
             width=200,
             height=50,
             command=self.mapflip,
         )
-        self.label_button.place(relx=0.025, rely=0.15 + 2 * bdiff)
+        self.map_button.place(relx=0.025, rely=0.15 + 2 * bdiff)
 
         self.label_button = ctk.CTkButton(
             master=self.root,
@@ -301,6 +303,15 @@ class tkGraph:
             command=self.labelflip,
         )
         self.label_button.place(relx=0.025, rely=0.15 + 3 * bdiff)
+
+        self.edge_label_button = ctk.CTkButton(
+            master=self.root,
+            text="Toggle Edge Labels",
+            width=200,
+            height=50,
+            command=self.edge_labelflip,
+        )
+        self.edge_label_button.place(relx=0.025, rely=0.15 + 4 * bdiff)
         self.exit_button = ctk.CTkButton(
             master=self.root,
             text="Exit",
@@ -318,6 +329,10 @@ class tkGraph:
         p0f.kill()
         exit(0)
 
+    def edge_labelflip(self):
+        global EDGE_LABELS
+        EDGE_LABELS = EDGE_LABELS ^ True
+        self.update_window()
     def labelflip(self):
         global LABELS
         LABELS = LABELS ^ True
@@ -337,10 +352,10 @@ class tkGraph:
         self.fig, self.ax = plt.subplots()
         N = len(list(self.G.nodes))
         if GEOPLOT:
-            self.fig.set_figwidth(12)
-            pos = mapplot.geoplot(self.G, self.ax, draw_map=MAP)
+            self.fig.set_size_inches(12, 10)
+            pos = mapplot.geoplot(self.G, None, draw_map=MAP)
             if not MAP:
-                pos = nx.spring_layout(self.G, pos=pos, iterations=5)
+                pos = nx.spring_layout(self.G, pos=pos, iterations=2)
         else:
             self.fig.set_size_inches(10, 10)
             # pos = nx.kamada_kawai_layout(self.G)
@@ -374,39 +389,41 @@ class tkGraph:
             arrows=False,
             edge_color=colors2,
         )
-        edge_labels = dict(
-            [((n1, n2), G.edges.get((n1, n2)).get("port", "")) for n1, n2 in G.edges]
-        )
-        nx.draw_networkx_edge_labels(G, pos, edge_labels)
-        tr_figure = self.ax.transData.transform
-        # Transform from display to figure coordinates
-        tr_axes = self.fig.transFigure.inverted().transform
-        icon_size = (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) * 0.025
-        icon_center = icon_size / 4
-        for n in self.G.nodes:
-            icon = PIL.Image.open(
-                self.G.nodes.get(n).get("image", "icons/icons8-my-computer-100.png")
+        if EDGE_LABELS:
+            edge_labels = dict(
+                [((n1, n2), G.edges.get((n1, n2)).get("port", "")) for n1, n2 in G.edges]
             )
-            flag = PIL.Image.open(self.G.nodes.get(n).get("flag", "flags/xx.png"))
-            xf, yf = tr_figure(
-                pos[n],
-            )
-            xa, ya = tr_axes((xf, yf))
-            a = plt.axes(
-                [
-                    xa - icon_center,
-                    ya + icon_size / 2 - icon_center,
-                    icon_size,
-                    icon_size,
-                ]
-            )
-            a.imshow(flag.convert("RGB"), zorder=3)
-            a.axis("off")
-            a = plt.axes(
-                [xa - icon_center, ya + icon_size - icon_center, icon_size, icon_size]
-            )
-            a.imshow(icon.convert("RGBA"), zorder=3)
-            a.axis("off")
+            nx.draw_networkx_edge_labels(G, pos, edge_labels)
+        if not MAP:
+            tr_figure = self.ax.transData.transform
+            # Transform from display to figure coordinates
+            tr_axes = self.fig.transFigure.inverted().transform
+            icon_size = (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) * 0.015
+            icon_center = icon_size / 4
+            for n in self.G.nodes:
+                icon = PIL.Image.open(
+                    self.G.nodes.get(n).get("image", "icons/icons8-my-computer-100.png")
+                )
+                flag = PIL.Image.open(self.G.nodes.get(n).get("flag", "flags/xx.png"))
+                xf, yf = tr_figure(
+                    pos[n],
+                )
+                xa, ya = tr_axes((xf, yf))
+                a = plt.axes(
+                    [
+                        xa - icon_center,
+                        ya + icon_size / 2 - icon_center,
+                        icon_size,
+                        icon_size,
+                    ]
+                )
+                a.imshow(flag.convert("RGB"), zorder=1)
+                a.axis("off")
+                a = plt.axes(
+                    [xa - icon_center, ya + icon_size - icon_center, icon_size, icon_size]
+                )
+                a.imshow(icon.convert("RGBA"), zorder=1)
+                a.axis("off")
         self.ax.axis("off")
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         canvas.draw()
