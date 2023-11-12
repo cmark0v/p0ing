@@ -26,12 +26,14 @@ from getflag import getflag
 PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
-
+ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
+VCTL_SPACE = 0.1
 EDGE_LABELS = (
     os.getenv("EDGE_LABELS", "t").lower() in YES
 )  # how often to read buffer and refresh
 VERBOSE = (os.getenv("VERBOSE", "f").lower() in YES) or ("-v" in sys.argv)
-sys.argv.remove("-v")
+if VERBOSE:
+    sys.argv.remove("-v")
 GEOPLOT = (
     os.getenv("GEOPLOT", "f").lower() in YES
 )  # how often to read buffer and refresh
@@ -153,9 +155,9 @@ def parsearp(G, arp):
             tgt, ask = req.pop()
             reqs.append(tgt)
             reqs_by.append(ask)
-            upsert(tgt,G,group='arp_ask')
-            upsert(ask,G,group='arp_active')
-            edge_upsert(ask,tgt, G, group="arp_ask", dist=1)
+            upsert(tgt, G, group="arp_ask")
+            upsert(ask, G, group="arp_active")
+            edge_upsert(ask, tgt, G, group="arp_ask", dist=1)
 
         rep = re.findall("Reply (.[\.0-9]) is-at", l)
         if len(rep) > 0:
@@ -226,14 +228,14 @@ upsert(
     myip,
     G,
     label="me",
-    group="arp",
+    group="arp_active",
     image=graphviz.geticon(dict(), name="james"),
 )
 upsert(
     gw,
     G,
     label="gateway",
-    group="arp",
+    group="arp_active",
     image=graphviz.geticon(dict(), name="cisco"),
 )
 G.add_edge(myip, gw, group="arp", label="default", dist=1)
@@ -249,7 +251,7 @@ for a in arptable:
         upsert(
             ip,
             G,
-            group="arp",
+            group="arp_active",
             image=graphviz.geticon(dict(), name="computer"),
         )
         G.add_edge(myip, ip, group="arp")
@@ -387,15 +389,19 @@ class tkGraph:
             height=50,
             command=self.pyvisplot,
         )
-        self.button.place(relx=0.025, rely=0.15)
+        self.button.place(relx=0.025, rely=VCTL_SPACE)
+        if GEOPLOT:
+            maptext = "Toggle Map"
+        else:
+            maptext = "use ipinfo.io geodata"
         self.map_button = ctk.CTkButton(
             master=self.root,
-            text="Map/physical prox cluster",
+            text=maptext,
             width=200,
             height=50,
             command=self.mapflip,
         )
-        self.map_button.place(relx=0.025, rely=0.15 + 2 * bdiff)
+        self.map_button.place(relx=0.025, rely=VCTL_SPACE + 2 * bdiff)
 
         self.label_button = ctk.CTkButton(
             master=self.root,
@@ -404,7 +410,7 @@ class tkGraph:
             height=50,
             command=self.labelflip,
         )
-        self.label_button.place(relx=0.025, rely=0.15 + 3 * bdiff)
+        self.label_button.place(relx=0.025, rely=VCTL_SPACE + 3 * bdiff)
 
         self.edge_label_button = ctk.CTkButton(
             master=self.root,
@@ -413,7 +419,24 @@ class tkGraph:
             height=50,
             command=self.edge_labelflip,
         )
-        self.edge_label_button.place(relx=0.025, rely=0.15 + 4 * bdiff)
+        self.edge_label_button.place(relx=0.025, rely=VCTL_SPACE + 4 * bdiff)
+        self.icon_button = ctk.CTkButton(
+            master=self.root,
+            text="Toggle icons",
+            width=200,
+            height=50,
+            command=self.icon_flip,
+        )
+        self.icon_button.place(relx=0.025, rely=VCTL_SPACE + 5 * bdiff)
+        #          self.prune_button = ctk.CTkButton(
+        #            master=self.root,
+        #            text="Toggle Prune",
+        #            width=200,
+        #            height=50,
+        #            command=self.prune_flip,
+        #        )
+        #        self.prune_button.place(relx=0.025, rely=VCTL_SPACE + 6 * bdiff)
+
         self.exit_button = ctk.CTkButton(
             master=self.root,
             text="Exit",
@@ -421,7 +444,7 @@ class tkGraph:
             height=50,
             command=self.exit,
         )
-        self.exit_button.place(relx=0.025, rely=0.85 + bdiff)
+        self.exit_button.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
         self.fig, self.ax = plt.subplots()
         self.update_window()
         self.after()
@@ -446,8 +469,23 @@ class tkGraph:
         self.update_window()
 
     def mapflip(self):
+        global GEOPLOT
         global MAP
-        MAP = MAP ^ True
+        if GEOPLOT:
+            MAP = MAP ^ True
+        else:
+            GEOPLOT = True
+            MAP = True
+        self.update_window()
+
+    def prune_flip(self):
+        global PRUNE
+        PRUNE = PRUNE ^ True
+        self.update_window()
+
+    def icon_flip(self):
+        global ICONS
+        ICONS = ICONS ^ True
         self.update_window()
 
     def pyvisplot(self):
@@ -505,7 +543,7 @@ class tkGraph:
                 ]
             )
             nx.draw_networkx_edge_labels(G, pos, edge_labels)
-        if not MAP:
+        if not MAP and ICONS:
             tr_figure = self.ax.transData.transform
             # Transform from display to figure coordinates
             tr_axes = self.fig.transFigure.inverted().transform

@@ -1,3 +1,4 @@
+import __main__
 import ipaddress
 import json
 import os
@@ -7,10 +8,12 @@ import numpy as np
 from dotenv import load_dotenv
 import networkx as nx
 
+YES = ["t", "true", "1", "yes", "y", "on"]
 load_dotenv()
 IPINFOTOKEN = os.getenv("IPINFOTOKEN", "")
 from geopy import distance
 
+ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
 
 def mkgeo_cluster_layout(G, pos_map):
     lons, lats = getgps(G)
@@ -79,9 +82,10 @@ def geoplot(G, ax=None, draw_map=True):
     if draw_map:
         m.drawcoastlines(ax=ax, zorder=1)
         m.drawcountries(ax=ax, zorder=1)
-        for n in G.nodes:
-            plt.imshow(
-                plt.imread(G.nodes.get(n).get("image")),
-                extent=[pos[n][0], pos[n][0] + 10, pos[n][1], pos[n][1] + 10],
-            )
+        if getattr(__main__,"ICONS",True):
+            for n in G.nodes:
+                plt.imshow(
+                    plt.imread(G.nodes.get(n).get("image")),
+                    extent=[pos[n][0], pos[n][0] + 10, pos[n][1], pos[n][1] + 10],
+                )
     return pos
