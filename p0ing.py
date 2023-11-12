@@ -91,7 +91,7 @@ def upsert(ip, G, **data):
         data["flag"] = flag
         data["shape"] = "image"  # for pyvis
         data["country"] = country
-        if data.get("image", False):
+        if not data.get("image", False):
             data["image"] = graphviz.geticon(data.get("gson", dict()))
         G.add_node(ip, **data)
         if ipaddress.ip_address(ip) in mynet.hosts() and ip != myip:
