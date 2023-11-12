@@ -24,13 +24,14 @@ YES = ["t", "true", "1", "yes", "y", "on"]
 from getflag import getflag
 
 PLOTX = 0.2
-REPLOT = int(os.getenv("REPLOT", 10))  # how often to read buffer and refresh
+REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
 
 EDGE_LABELS = (
     os.getenv("EDGE_LABELS", "t").lower() in YES
 )  # how often to read buffer and refresh
-
+VERBOSE = (os.getenv("VERBOSE", "f").lower() in YES) or ("-v" in sys.argv)
+sys.argv.remove("-v")
 GEOPLOT = (
     os.getenv("GEOPLOT", "f").lower() in YES
 )  # how often to read buffer and refresh
@@ -106,6 +107,8 @@ def upsert(ip, G, **data):
         G.nodes.get(ip)["image"] = graphviz.geticon(
             data.get("gson", dict()), default=image
         )
+    if VERBOSE:
+        print(f"insert {ip}")
 
 
 def edge_upsert(cli, srv, G, **data):
@@ -126,31 +129,64 @@ def hashcolor(strr):
 
 
 def openarp():
-    arp = Popen("sudo tcpdump -vvv -n arp|tee ./arp.log ", shell=True, stdout=PIPE)
+    arp = Popen(
+        "sudo tcpdump -vvv -n arp|tee ./arp.log ",
+        stdout=PIPE,
+        shell=True,
+        text=True,
+        pipesize=100000,
+        bufsize=100000,
+    )
+
     return arp
 
 
 def parsearp(G, arp):
+    global stub
+    global stub_by
     reps = []
-    reqs = set()
-    asoc = dict()
+    reqs = stub
+    reqs_by = stub_by
     for l in non_block_read(arp.stdout):
-        print(l)
-        req = re.findall("who-has (.*) tell (.*), ", l.decode())
+        req = re.findall("who-has ([\.0-9]*) tell (.*), ", l)
         if len(req) > 0:
             tgt, ask = req.pop()
-            reqs.add(tgt)
-            asoc[tgt] = ask
-        rep = re.findall("Reply (.*) is-at", l.decode())
-        if len(rep)>0:
-            reps.append(rep.pop())
+            reqs.append(tgt)
+            reqs_by.append(ask)
+            upsert(tgt,G,group='arp_ask')
+            upsert(ask,G,group='arp_active')
+            edge_upsert(ask,tgt, G, group="arp_ask", dist=1)
 
-    for r in reps:
-        upsert(r, G, group="arp")
+        rep = re.findall("Reply (.[\.0-9]) is-at", l)
+        if len(rep) > 0:
+            reps.append(rep.pop())
+    if len(reps) == 0:
+        stub = reqs
+        stub_by = reqs_by
+        return
+    reqs.reverse()
+    reps.reverse()
+    reqs_by.reverse()
+    if VERBOSE:
+        print(reps)
+    for j, r in enumerate(reps):
+        upsert(r, G, group="arp_active")
         if r in reqs:
-            upsert(asoc[r], G, group="arp")
-            edge_upsert(asoc[r], r, G, group="arp_ask", dist=1)
-            edge_upsert(r, asoc[r], G, group="arp_reply", dist=1)
+            i = reqs.index(r)
+            if j == 0:
+                stub = reqs[0 :: i - 1]
+                stub_by = reqs_by[0 :: i - 1]
+                stub.reverse()
+                stub_by.reverse()
+            reqs.pop(i)
+            by = reqs_by.pop(i)
+            upsert(by, G, group="arp_active")
+            edge_upsert(by, r, G, group="arp_ask", dist=1)
+            edge_upsert(r, by, G, group="arp_reply", dist=1)
+            if VERBOSE:
+                print(by, " ask for ", r)
+        else:
+            print("arp reply from ", r, " to unknown")
 
 
 def traceroute(Tip, G, port=False, timeout=5):
@@ -203,6 +239,8 @@ upsert(
 G.add_edge(myip, gw, group="arp", label="default", dist=1)
 G.add_edge(gw, myip, group="arp", label="default", dist=1)
 arp = os.popen("arp -na -i %s" % (IFACE,))
+stub = []
+stub_by = []
 arptable = arp.readlines()
 arp.close()
 for a in arptable:
@@ -511,12 +549,15 @@ class tkGraph:
 
     def after(self):
         N = len(list(self.G.nodes))
+        self.parsearp()
         self.updateG()
         N2 = len(list(self.G.nodes))
-        parsearp(self.G, arp)
         if N != N2:
             self.update_window()
         self.root.after(REPLOT * 1000, self.after)
+
+    def parsearp(self):
+        parsearp(self.G, arp)
 
     def updateG(self):
         self.G = updateG(self.G)
