@@ -27,11 +27,16 @@ PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 10))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
 
-EDGE_LABELS = os.getenv("EDGE_LABELS", "t").lower() in YES  # how often to read buffer and refresh
-MAP = os.getenv("MAP", "t").lower() in YES  # how often to read buffer and refresh
+EDGE_LABELS = (
+    os.getenv("EDGE_LABELS", "t").lower() in YES
+)  # how often to read buffer and refresh
 
 GEOPLOT = (
     os.getenv("GEOPLOT", "f").lower() in YES
+)  # how often to read buffer and refresh
+
+MAP = (
+    os.getenv("MAP", str(GEOPLOT)).lower() in YES
 )  # how often to read buffer and refresh
 EDGE_COLOR_BY = os.getenv(
     "EDGE_COLOR_BY", "port"  # dotted foreground of edge
@@ -86,6 +91,8 @@ def upsert(ip, G, **data):
         data["flag"] = flag
         data["shape"] = "image"  # for pyvis
         data["country"] = country
+        if data.get("image", False):
+            data["image"] = graphviz.geticon(data.get("gson", dict()))
         G.add_node(ip, **data)
         if ipaddress.ip_address(ip) in mynet.hosts() and ip != myip:
             G.nodes.get(ip)["group"] = "arp"
@@ -116,6 +123,58 @@ def hashcolor(strr):
     g = (strr.__hash__() >> 8) % 255
     b = (strr.__hash__() >> 16) % 255
     return "#%02x%02x%02x" % (r, g, b)
+
+
+def openarp():
+    arp = Popen("sudo tcpdump -vvv -n arp|tee ./arp.log ", shell=True, stdout=PIPE)
+    return arp
+
+
+def parsearp(G, arp):
+    reps = []
+    reqs = set()
+    asoc = dict()
+    for l in non_block_read(arp.stdout):
+        print(l)
+        req = re.findall("who-has (.*) tell (.*), ", l.decode())
+        if len(req) > 0:
+            tgt, ask = req.pop()
+            reqs.add(tgt)
+            asoc[tgt] = ask
+        rep = re.findall("Reply (.*) is-at", l.decode())
+        if len(rep)>0:
+            reps.append(rep.pop())
+
+    for r in reps:
+        upsert(r, G, group="arp")
+        if r in reqs:
+            upsert(asoc[r], G, group="arp")
+            edge_upsert(asoc[r], r, G, group="arp_ask", dist=1)
+            edge_upsert(r, asoc[r], G, group="arp_reply", dist=1)
+
+
+def traceroute(Tip, G, port=False, timeout=5):
+    if port:
+        cmd = f"sudo traceroute -n -T -p {port} {Tip}"
+    else:
+        cmd = f"traceroute -n {Tip}"
+    tr = Popen(cmd, shell=True, stdout=PIPE)
+    time.sleep(timeout)
+    lines = non_block_read(tr.stdout)
+    tr.kill()
+    lastips = [myip]
+    dist = 1
+    for l in lines:
+        ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l.decode())
+        if len(ips) > 0:
+            for ip in ips:
+                upsert(ip, G, group="traceroute")
+                for lip in lastips:
+                    edge_upsert(lip, ip, G, group="traceroute", dist=dist)
+            lastips = ips
+            dist = 1
+        else:
+            dist = dist + 1
 
 
 def readp0f(g):
@@ -175,6 +234,10 @@ else:
     except Exception as e:
         print("cant run json p0f (looking in ./p0f \n", str(e))
         exit(0)
+    try:
+        arp = openarp()
+    except Exception as e:
+        print("can't open arp tcpdump", str(e))
 j = 0
 begin = time.time()
 lastplot = begin
@@ -196,6 +259,7 @@ def updateG(G):
                 gson = json.loads(g.decode())
             except Exception as e:
                 print("json error", str(e), g)
+                continue
         else:  # if using stock p0f
             gson = readp0f(g)
         subj = gson.get("subj")
@@ -327,12 +391,17 @@ class tkGraph:
 
     def exit(self):
         p0f.kill()
+        try:
+            arp.kill()
+        except:
+            print("cant kill arp tcpdump")
         exit(0)
 
     def edge_labelflip(self):
         global EDGE_LABELS
         EDGE_LABELS = EDGE_LABELS ^ True
         self.update_window()
+
     def labelflip(self):
         global LABELS
         LABELS = LABELS ^ True
@@ -355,7 +424,8 @@ class tkGraph:
             self.fig.set_size_inches(12, 10)
             pos = mapplot.geoplot(self.G, None, draw_map=MAP)
             if not MAP:
-                pos = nx.spring_layout(self.G, pos=pos, iterations=2)
+                posp = mapplot.mkgeo_cluster_layout(G, pos)
+                pos = nx.spring_layout(self.G, pos=posp, iterations=5)
         else:
             self.fig.set_size_inches(10, 10)
             # pos = nx.kamada_kawai_layout(self.G)
@@ -391,7 +461,10 @@ class tkGraph:
         )
         if EDGE_LABELS:
             edge_labels = dict(
-                [((n1, n2), G.edges.get((n1, n2)).get("port", "")) for n1, n2 in G.edges]
+                [
+                    ((n1, n2), G.edges.get((n1, n2)).get("port", ""))
+                    for n1, n2 in G.edges
+                ]
             )
             nx.draw_networkx_edge_labels(G, pos, edge_labels)
         if not MAP:
@@ -420,7 +493,12 @@ class tkGraph:
                 a.imshow(flag.convert("RGB"), zorder=1)
                 a.axis("off")
                 a = plt.axes(
-                    [xa - icon_center, ya + icon_size - icon_center, icon_size, icon_size]
+                    [
+                        xa - icon_center,
+                        ya + icon_size - icon_center,
+                        icon_size,
+                        icon_size,
+                    ]
                 )
                 a.imshow(icon.convert("RGBA"), zorder=1)
                 a.axis("off")
@@ -435,6 +513,7 @@ class tkGraph:
         N = len(list(self.G.nodes))
         self.updateG()
         N2 = len(list(self.G.nodes))
+        parsearp(self.G, arp)
         if N != N2:
             self.update_window()
         self.root.after(REPLOT * 1000, self.after)
