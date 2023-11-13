@@ -15,6 +15,7 @@ from geopy import distance
 
 ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
 
+
 def mkgeo_cluster_layout(G, pos_map):
     lons, lats = getgps(G)
     pos_geo = {n: (lats[i], lons[i]) for i, n in enumerate(G.nodes)}
@@ -22,12 +23,13 @@ def mkgeo_cluster_layout(G, pos_map):
     for j in pos_geo.keys():
         D.add_node(j)
         for k in D.nodes:
-            D.add_edge(j, k, weight=distance.geodesic(pos_geo[j], pos_geo[k]).meters)
-    pos = nx.spring_layout(D, pos=pos_map, k=0.3, iterations=50, weight="weight")
-    pos = nx.kamada_kawai_layout(
-        D,
-        pos=pos_map,
-    )
+            D.add_edge(
+                j,
+                k,
+                weight=1
+                / (np.sqrt(distance.geodesic(pos_geo[j], pos_geo[k]).kilometers) + 0.1),
+            )
+    pos = nx.spring_layout(D, pos=pos_map, k=10, iterations=50, weight="weight")
     return pos
 
 
@@ -50,7 +52,11 @@ def getgps(G):
 
 
 def getipinfo(ip):
-    if ipaddress.ip_address(ip).is_private:
+    try:
+        ippriv = ipaddress.ip_address(ip).is_private
+    except:
+        ippriv = True
+    if ippriv:
         b = ""
         f = os.popen(f"curl https://ipinfo.io/{b}?token={IPINFOTOKEN} 2>/dev/null", "r")
     else:
@@ -82,7 +88,7 @@ def geoplot(G, ax=None, draw_map=True):
     if draw_map:
         m.drawcoastlines(ax=ax, zorder=1)
         m.drawcountries(ax=ax, zorder=1)
-        if getattr(__main__,"ICONS",True):
+        if getattr(__main__, "ICONS", True):
             for n in G.nodes:
                 plt.imshow(
                     plt.imread(G.nodes.get(n).get("image")),

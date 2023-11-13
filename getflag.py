@@ -4,8 +4,11 @@ import ipaddress
 
 
 def getflag(_ip):
-    cip = ipaddress.ip_address(_ip)
-    ip = cip.exploded
+    try:
+        cip = ipaddress.ip_address(_ip)
+        ip = cip.exploded
+    except:
+        return f"flags/xx.png", "Unknown"
     b = popen(f"geoiplookup {ip}")
     line = b.readline()
     b.close()

@@ -97,8 +97,12 @@ def upsert(ip, G, **data):
         if not data.get("image", False):
             data["image"] = graphviz.geticon(data.get("gson", dict()))
         G.add_node(ip, **data)
-        if ipaddress.ip_address(ip) in mynet.hosts() and ip != myip:
-            G.nodes.get(ip)["group"] = "arp"
+        try:
+            ipc = ipaddress.ip_address(ip)
+        except:
+            return
+        if ipc in mynet.hosts() and ip != myip:
+            G.nodes.get(ip)["group"] = "arp_active"
             edge_upsert(myip, ip, G, group="arp", dist=1)
             edge_upsert(ip, myip, G, group="arp", dist=1)
     else:
@@ -192,27 +196,40 @@ def parsearp(G, arp):
 
 
 def traceroute(Tip, G, port=False, timeout=5):
+    print("traceroute ", Tip, "port ", port)
     if port:
         cmd = f"sudo traceroute -n -T -p {port} {Tip}"
     else:
         cmd = f"traceroute -n {Tip}"
-    tr = Popen(cmd, shell=True, stdout=PIPE)
+    tr = Popen(cmd, shell=True, stdout=PIPE, text=True)
     time.sleep(timeout)
-    lines = non_block_read(tr.stdout)
     tr.kill()
+    lines = tr.stdout.readlines()
     lastips = [myip]
-    dist = 1
-    for l in lines:
-        ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l.decode())
+    for jj, l in enumerate(lines):
+        ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l)
         if len(ips) > 0:
+            if VERBOSE:
+                print(ips)
             for ip in ips:
-                upsert(ip, G, group="traceroute")
+                if ipaddress.ip_address(ip).is_private:
+                    ipname = (
+                        ip
+                        + "priv"
+                        + hex(str(ip + lastips[0]).__hash__() % (256**2))[2::]
+                    )
+                else:
+                    ipname = ip
+                upsert(ipname, G, group="traceroute", real_ip=False)
                 for lip in lastips:
-                    edge_upsert(lip, ip, G, group="traceroute", dist=dist)
-            lastips = ips
-            dist = 1
+                    edge_upsert(lip, ip, G, group="traceroute", dist=1)
         else:
-            dist = dist + 1
+            ip = "??" + hex(str(lastips + [Tip]).__hash__() % (256**3))
+            upsert(ip, G, group="traceroute", dist=1, real_ip=False)
+            for lip in lastips:
+                edge_upsert(lip, ip, G, group="traceroute", dist=1)
+            ips = [ip]
+        lastips = ips
 
 
 def readp0f(g):
@@ -258,21 +275,31 @@ for a in arptable:
         G.add_edge(ip, myip, group="arp")
 
 if len(sys.argv) > 1:
-    p0f = open(sys.argv.pop(), "r")
-    args = " ".join(sys.argv)
-    if args.find("-j") != -1 or args.find("--json") != -1:
-        readjson = True
-    else:
-        readjson = False
-    readlive = False
+    if sys.argv[1] == "-j" or sys.argv[1] == "--json":
+        p0f = open(sys.argv[-1], "r")
+        args = " ".join(sys.argv)
+        if args.find("-j") != -1 or args.find("--json") != -1:
+            readjson = True
+        else:
+            readjson = False
+        readlive = False
+    elif sys.argv[1].lower() == "-t":
+        try:
+            port = sys.argv[3]
+        except:
+            port = False
+        traceroute(sys.argv[2], G, port=port)
 else:
     try:
+        print("starting p0f")
         p0f = Popen("(cd p0f; sudo ./p0f|tee ../p0fjson.log )", shell=True, stdout=PIPE)
         readjson = True
         readlive = True
         print("reading live with json-p0f")
     except Exception as e:
-        print("cant run json p0f (looking in ./p0f \n", str(e))
+        print(
+            "cant run json p0f (looking in ./p0f \n read log with -f p0f.log\n", str(e)
+        )
         exit(0)
     try:
         arp = openarp()
@@ -360,6 +387,7 @@ def updateG(G):
             group="p0f",
         )
         if mod.find("syn+ack") >= 0:
+            upsert(ipTo[0], G, port=ipTo[1])
             edge_upsert(
                 ipTo[0], ipFrom[0], G, mod=mod, link=gson.get("link", ""), group="ack"
             )
@@ -368,7 +396,7 @@ def updateG(G):
 
 class tkGraph:
     def __init__(self, G):
-        bdiff = 0.1  # distance between buttons as fraction of window height
+        bdiff = 0.05  # distance between buttons as fraction of window height
         self.G = G
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
@@ -390,10 +418,11 @@ class tkGraph:
             command=self.pyvisplot,
         )
         self.button.place(relx=0.025, rely=VCTL_SPACE)
+        #############################
         if GEOPLOT:
             maptext = "Toggle Map"
         else:
-            maptext = "use ipinfo.io geodata"
+            maptext = "make map with ipinfo.io geodata"
         self.map_button = ctk.CTkButton(
             master=self.root,
             text=maptext,
@@ -403,6 +432,7 @@ class tkGraph:
         )
         self.map_button.place(relx=0.025, rely=VCTL_SPACE + 2 * bdiff)
 
+        #############################
         self.label_button = ctk.CTkButton(
             master=self.root,
             text="Toggle Node Labels",
@@ -412,6 +442,7 @@ class tkGraph:
         )
         self.label_button.place(relx=0.025, rely=VCTL_SPACE + 3 * bdiff)
 
+        #############################
         self.edge_label_button = ctk.CTkButton(
             master=self.root,
             text="Toggle Edge Labels",
@@ -420,6 +451,8 @@ class tkGraph:
             command=self.edge_labelflip,
         )
         self.edge_label_button.place(relx=0.025, rely=VCTL_SPACE + 4 * bdiff)
+
+        #############################
         self.icon_button = ctk.CTkButton(
             master=self.root,
             text="Toggle icons",
@@ -428,14 +461,30 @@ class tkGraph:
             command=self.icon_flip,
         )
         self.icon_button.place(relx=0.025, rely=VCTL_SPACE + 5 * bdiff)
-        #          self.prune_button = ctk.CTkButton(
-        #            master=self.root,
-        #            text="Toggle Prune",
-        #            width=200,
-        #            height=50,
-        #            command=self.prune_flip,
-        #        )
-        #        self.prune_button.place(relx=0.025, rely=VCTL_SPACE + 6 * bdiff)
+        #############################
+        self.traceroute_button = ctk.CTkButton(
+            master=self.root,
+            text="traceroute",
+            width=200,
+            height=50,
+            command=self.traceroute_flip,
+        )
+        self.traceroute_button.place(relx=0.025, rely=VCTL_SPACE + 8 * bdiff)
+        #############################
+        self.tracert_input = ctk.CTkComboBox(
+            self.root, width=200, height=50, values=list(self.G.nodes)
+        )
+
+        self.tracert_input.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
+        #############################
+        self.save_button = ctk.CTkButton(
+            master=self.root,
+            text="Save",
+            width=200,
+            height=50,
+            command=self.save,
+        )
+        self.save_button.place(relx=0.025, rely=0.90)
 
         self.exit_button = ctk.CTkButton(
             master=self.root,
@@ -444,11 +493,14 @@ class tkGraph:
             height=50,
             command=self.exit,
         )
-        self.exit_button.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
+        self.exit_button.place(relx=0.025, rely=0.95)
+
+        #############################
         self.fig, self.ax = plt.subplots()
         self.update_window()
         self.after()
         self.root.mainloop()
+        self.traceroute_flip()
 
     def exit(self):
         p0f.kill()
@@ -457,6 +509,11 @@ class tkGraph:
         except:
             print("cant kill arp tcpdump")
         exit(0)
+
+    def save(self):
+        hashG = hex(self.G.__hash__() % (1 << 32))
+        outf = f"save_p0ing_{hashG}.gpkl"
+        nx.write_gpickle(self.G, outf)
 
     def edge_labelflip(self):
         global EDGE_LABELS
@@ -483,6 +540,11 @@ class tkGraph:
         PRUNE = PRUNE ^ True
         self.update_window()
 
+    def traceroute_flip(self):
+        host = self.tracert_input.get()
+        port = self.G.nodes.get(host).get("port")
+        traceroute(host, self.G, port=port)
+
     def icon_flip(self):
         global ICONS
         ICONS = ICONS ^ True
@@ -492,6 +554,7 @@ class tkGraph:
         pyvisplot(self.G)
 
     def update_window(self):
+        self.tracert_input.configure(values=list(self.G.nodes))
         self.ax.cla()
         plt.close()
         self.fig, self.ax = plt.subplots()
@@ -500,13 +563,15 @@ class tkGraph:
             self.fig.set_size_inches(12, 10)
             pos = mapplot.geoplot(self.G, None, draw_map=MAP)
             if not MAP:
-                posp = mapplot.mkgeo_cluster_layout(G, pos)
-                pos = nx.spring_layout(self.G, pos=posp, iterations=5)
+                pos = mapplot.mkgeo_cluster_layout(G, pos)
+                # pos = nx.spring_layout(self.G, pos=posp, iterations=5)
         else:
             self.fig.set_size_inches(10, 10)
-            # pos = nx.kamada_kawai_layout(self.G)
-            pos = nx.multipartite_layout(self.G, subset_key="flag")
-            pos = nx.spring_layout(self.G, pos=pos, iterations=5)
+            try:
+                pos = nx.multipartite_layout(self.G, subset_key="group")
+            except:
+                pos = nx.kamada_kawai_layout(self.G)
+            pos = nx.spring_layout(self.G, k=5, pos=pos, iterations=5)
         colors = []
         colors2 = []
         for e in self.G.edges:
