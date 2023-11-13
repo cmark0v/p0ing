@@ -212,6 +212,7 @@ def traceroute(Tip, G, port=False, timeout=5):
             if VERBOSE:
                 print(ips)
             for ip in ips:
+                ipnames = []
                 if ipaddress.ip_address(ip).is_private:
                     ipname = (
                         ip
@@ -220,15 +221,16 @@ def traceroute(Tip, G, port=False, timeout=5):
                     )
                 else:
                     ipname = ip
+                ipnames.append(ipname)
                 upsert(ipname, G, group="traceroute", real_ip=False)
                 for lip in lastips:
-                    edge_upsert(lip, ip, G, group="traceroute", dist=1)
+                    edge_upsert(lip, ipname, G, group="traceroute", dist=1)
         else:
             ip = "??" + hex(str(lastips + [Tip]).__hash__() % (256**3))
             upsert(ip, G, group="traceroute", dist=1, real_ip=False)
             for lip in lastips:
                 edge_upsert(lip, ip, G, group="traceroute", dist=1)
-            ips = [ip]
+            ips = ipnames
         lastips = ips
 
 
