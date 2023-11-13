@@ -1,13 +1,15 @@
 ## p0ing
 
 
-![p0ing](icons/p0ing1.png "p0ing graph")
+![p0ing](icons/p0ing3.png "p0ing graph")
 
 passive online interactive network graph
 
 
 graph visualization tool for passive network recon, attack surface monitoring. 
-Primarily uses ``p0f``  to collect data and networkx to organize it. visualization in pyvis(as a static webapp) and networkx builtins(as a tkint interface)
+Primarily uses ``p0f``  to collect data and networkx to organize it. visualization in pyvis(as a static webapp) and networkx builtins(as a tkint interface). 
+
+It is passive by default but includes integration with traceroute for active refinement and discovery of IP layer structures. 
 
 requirements
 ------------
@@ -15,7 +17,7 @@ requirements
 this should about cover it. tkinter needs to be installed by apt it seems  
 
 ```
-apt install geoip-bin libpcap-dev python3-tk curl build-essential
+apt install geoip-bin libpcap-dev python3-tk curl build-essential traceroute
 pip install networkx
 pip install customtkinter
 pip install numpy
@@ -38,7 +40,7 @@ env vars
 - ``GEOPLOT``- plot on map? (not totally passive, sends traffic to ipinfo
 - ``REPLOT`` -  time between refresh in seconds
 - ``LABELS`` -  bool plot node labels(ips) in pic
-- ``IPINFOTOKEN`` - ipinfo auth token, can go in .env, only used in geoplot. 
+- ``IPINFOTOKEN`` - ipinfo.io API auth token, can go in .env, only used in geoplot. 
 
 
 ![p0ing](icons/p0ing0.png "p0ing graph")

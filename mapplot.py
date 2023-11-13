@@ -91,7 +91,9 @@ def geoplot(G, ax=None, draw_map=True):
         if getattr(__main__, "ICONS", True):
             for n in G.nodes:
                 plt.imshow(
-                    plt.imread(G.nodes.get(n).get("image")),
+                    plt.imread(
+                        G.nodes.get(n).get("image", "icons/icons8-james-brown-100.png")
+                    ),
                     extent=[pos[n][0], pos[n][0] + 10, pos[n][1], pos[n][1] + 10],
                 )
     return pos
