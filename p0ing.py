@@ -52,6 +52,7 @@ ipr.close()
 dev = re.findall("dev (.+?) ", lines[0])[0]
 gw = re.findall("default via (.+?) ", lines[0])[0]
 routes = dict()
+blacklist = set()
 
 
 def non_block_read(output):
@@ -118,6 +119,8 @@ def upsert(ip, G, **data):
 
 
 def edge_upsert(cli, srv, G, **data):
+    if (cli, srv) in blacklist:
+        return
     edge = G.edges.get((cli, srv), False)
     if not edge:
         G.add_edge(cli, srv, **data)
@@ -195,7 +198,19 @@ def parsearp(G, arp):
             print("arp reply from ", r, " to unknown")
 
 
+def rm_edge(ip1, ip2):
+    global blacklist
+    blacklist.add((ip1, ip2))
+    blacklist.add((ip2, ip1))
+    try:
+        G.remove_edge(ip1, ip2)
+        G.remove_edge(ip2, ip1)
+    except:
+        pass
+
+
 def traceroute(Tip, G, port=False, timeout=5):
+    rm_edge(Tip, myip)
     print("traceroute ", Tip, "port ", port)
     if port:
         cmd = f"sudo traceroute -n -T -p {port} {Tip}"
@@ -213,7 +228,7 @@ def traceroute(Tip, G, port=False, timeout=5):
                 print(ips)
             ipnames = []
             for ip in ips:
-                if ipaddress.ip_address(ip).is_private:
+                if ipaddress.ip_address(ip).is_private and ip != myip and ip != gw:
                     ipname = (
                         ip
                         + "priv"
