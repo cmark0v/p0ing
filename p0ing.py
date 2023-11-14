@@ -211,8 +211,8 @@ def traceroute(Tip, G, port=False, timeout=5):
         if len(ips) > 0:
             if VERBOSE:
                 print(ips)
+            ipnames = []
             for ip in ips:
-                ipnames = []
                 if ipaddress.ip_address(ip).is_private:
                     ipname = (
                         ip
@@ -226,12 +226,12 @@ def traceroute(Tip, G, port=False, timeout=5):
                 for lip in lastips:
                     edge_upsert(lip, ipname, G, group="traceroute", dist=1)
         else:
-            ip = "??" + hex(str(lastips + [Tip]).__hash__() % (256**3))
+            ip = "??" + hex(str(Tip.split(".")[0:2]).__hash__() % (256**3))
             upsert(ip, G, group="traceroute", dist=1, real_ip=False)
             for lip in lastips:
                 edge_upsert(lip, ip, G, group="traceroute", dist=1)
-            ips = ipnames
-        lastips = ips
+            ipnames = [ip]
+        lastips = ipnames
 
 
 def readp0f(g):
@@ -464,6 +464,37 @@ class tkGraph:
         )
         self.icon_button.place(relx=0.025, rely=VCTL_SPACE + 5 * bdiff)
         #############################
+        lvalues = [
+            f
+            for f in nx.__dir__()
+            if f.split("_")[-1] == "layout" and len(f.split("_")) > 1
+        ]
+        self.layout_input = ctk.CTkComboBox(
+            self.root,
+            width=200,
+            height=50,
+            values=lvalues,
+        )
+        self.layout_input.place(relx=0.025, rely=VCTL_SPACE + 6 * bdiff)
+        self.layout_input2 = ctk.CTkComboBox(
+            self.root,
+            width=200,
+            height=50,
+            values=lvalues,
+        )
+        self.layout_input2.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
+        #############################
+        self.layout_input_opts = ctk.CTkComboBox(
+            self.root,
+            width=200,
+            height=50,
+            values=['{"nodes": "None"}', '{"iterations": "5"}'],
+        )
+        self.layout_input_opts.place(relx=0.025, rely=VCTL_SPACE + 8 * bdiff)
+        #############################
+        #############################
+        #############################
+        #############################
         self.traceroute_button = ctk.CTkButton(
             master=self.root,
             text="traceroute",
@@ -471,13 +502,13 @@ class tkGraph:
             height=50,
             command=self.traceroute_flip,
         )
-        self.traceroute_button.place(relx=0.025, rely=VCTL_SPACE + 8 * bdiff)
+        self.traceroute_button.place(relx=0.025, rely=VCTL_SPACE + 13 * bdiff)
         #############################
         self.tracert_input = ctk.CTkComboBox(
             self.root, width=200, height=50, values=list(self.G.nodes)
         )
 
-        self.tracert_input.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
+        self.tracert_input.place(relx=0.025, rely=VCTL_SPACE + 12 * bdiff)
         #############################
         self.save_button = ctk.CTkButton(
             master=self.root,
@@ -487,6 +518,19 @@ class tkGraph:
             command=self.save,
         )
         self.save_button.place(relx=0.025, rely=0.90)
+        self.save_input = ctk.CTkComboBox(
+            self.root,
+            width=200,
+            height=50,
+            values=[
+                f + f", p0ing.{f.split('_')[-1]}"
+                for f in nx.__dir__()
+                if f[0:5] == "write"
+            ],
+        )
+
+        self.save_input.place(relx=0.025, rely=0.85)
+        #############################
 
         self.exit_button = ctk.CTkButton(
             master=self.root,
@@ -513,9 +557,9 @@ class tkGraph:
         exit(0)
 
     def save(self):
-        hashG = hex(self.G.__hash__() % (1 << 32))
-        outf = f"save_p0ing_{hashG}.gpkl"
-        nx.write_gpickle(self.G, outf)
+        fun, outf = self.save_input.get().split(", ")
+        getattr(nx, fun)(self.G, outf)
+        print(fun, " saved to ", outf)
 
     def edge_labelflip(self):
         global EDGE_LABELS
@@ -544,7 +588,10 @@ class tkGraph:
 
     def traceroute_flip(self):
         host = self.tracert_input.get()
-        port = self.G.nodes.get(host).get("port")
+        if len(host.split(":")) == 2:
+            port = host.split(":")[1]
+        else:
+            port = self.G.nodes.get(host).get("port", False)
         traceroute(host, self.G, port=port)
 
     def icon_flip(self):
@@ -570,10 +617,16 @@ class tkGraph:
         else:
             self.fig.set_size_inches(10, 10)
             try:
-                pos = nx.multipartite_layout(self.G, subset_key="group")
+                pos = getattr(nx, self.layout_input.get())(self.G)
             except:
-                pos = nx.kamada_kawai_layout(self.G)
-            pos = nx.spring_layout(self.G, k=5, pos=pos, iterations=5)
+                pos = nx.spring_layout(self.G, iterations=5)
+            try:
+                opts = json.loads(self.layout_input_opts.get())
+                pos = getattr(nx, self.layout_input2.get(), lambda G, x: x)(
+                    self.G, **opts
+                )
+            except:
+                print("error in step 2 of layout")
         colors = []
         colors2 = []
         for e in self.G.edges:

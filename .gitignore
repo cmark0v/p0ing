@@ -1,3 +1,17 @@
+*.adjlist
+*.adjlist
+*.edgelist
+*.edgelist
+*.pajek
+*.sparse6
+*.graph6
+*.gml
+*.graphml
+*.xml
+*.lxml
+*.gexf
+*.text
+*.latex
 .env
 todo
 trash/*
