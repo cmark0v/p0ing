@@ -9,6 +9,8 @@ passive online interactive network graph
 graph visualization tool for passive network recon, attack surface monitoring. 
 Primarily uses ``p0f``  to collect data and networkx to organize it. visualization in pyvis(as a static webapp) and networkx builtins(as a tkint interface). 
 
+it uses tcpdump to passively discover local hosts via monitoring arp
+
 It is passive by default but includes integration with traceroute for active refinement and discovery of IP layer structures. 
 
 requirements
@@ -41,7 +43,8 @@ env vars
 - ``REPLOT`` -  time between refresh in seconds
 - ``LABELS`` -  bool plot node labels(ips) in pic
 - ``IPINFOTOKEN`` - ipinfo.io API auth token, can go in .env, only used in geoplot. 
-
+- ``PASSIVE_ARP``- plot hosts discovered through other hosts(gateway broadcasts generally) arp queries default true. if false, only hosts seen sending arp responses/requests will be discovered via arp
+- ``TCPDUMP`` - toggle tcpdump bool
 
 ![p0ing](icons/p0ing0.png "p0ing graph")
 

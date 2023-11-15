@@ -1,3 +1,6 @@
 [submodule "p0f"]
 	path = p0f
 	url = https://github.com/cmark0v/p0f-json
+[submodule "jsonofabitch"]
+	path = jsonofabitch
+	url = https://github.com/cmark0v/jsonofabitch

@@ -14,7 +14,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import time
 import graphviz
-import json
+try:
+    import jsonofabitch.jsonofabitch as json
+except:
+    print("JSOB is absent, forced to use strict json")
+    import json
+
 import sys
 import re
 import ipaddress
@@ -27,6 +32,9 @@ PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
 ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
+TCPDUMP = os.getenv("TCPDUMP", "t").lower() in YES  # how often to read buffer and refresh
+
+PASSIVE_ARP = os.getenv("PASSIVE_ARP", 't') in YES  # how often to read buffer and refresh
 VCTL_SPACE = 0.1
 EDGE_LABELS = (
     os.getenv("EDGE_LABELS", "t").lower() in YES
@@ -53,7 +61,7 @@ dev = re.findall("dev (.+?) ", lines[0])[0]
 gw = re.findall("default via (.+?) ", lines[0])[0]
 routes = dict()
 blacklist = set()
-
+traceroute_counter=0
 
 def non_block_read(output):
     fd = output.fileno()
@@ -103,7 +111,6 @@ def upsert(ip, G, **data):
         except:
             return
         if ipc in mynet.hosts() and ip != myip:
-            G.nodes.get(ip)["group"] = "arp_active"
             edge_upsert(myip, ip, G, group="arp", dist=1)
             edge_upsert(ip, myip, G, group="arp", dist=1)
     else:
@@ -163,10 +170,12 @@ def parsearp(G, arp):
             tgt, ask = req.pop()
             reqs.append(tgt)
             reqs_by.append(ask)
-            upsert(tgt, G, group="arp_ask")
-            upsert(ask, G, group="arp_active")
-            edge_upsert(ask, tgt, G, group="arp_ask", dist=1)
-
+            if PASSIVE_ARP:
+                upsert(tgt, G, group="arp_ask")
+                upsert(ask, G, group="arp_active")
+                edge_upsert(ask, tgt, G, group="arp_ask", dist=1)
+            else:
+                upsert(ask, G, group="arp_active")
         rep = re.findall("Reply (.[\.0-9]) is-at", l)
         if len(rep) > 0:
             reps.append(rep.pop())
@@ -211,6 +220,9 @@ def rm_edge(ip1, ip2):
 
 
 def traceroute(Tip, G, port=False, timeout=5):
+    global traceroute_counter
+    traceroute_counter=traceroute_counter+1
+    upsert(Tip,G,group=f"traceroute{traceroute_counter}")
     rm_edge(Tip, myip)
     rm_edge(Tip, gw)
     print("traceroute ", Tip, "port ", port)
@@ -239,14 +251,14 @@ def traceroute(Tip, G, port=False, timeout=5):
                 else:
                     ipname = ip
                 ipnames.append(ipname)
-                upsert(ipname, G, group="traceroute", real_ip=False)
+                upsert(ipname, G, group=f"traceroute{traceroute_counter}", real_ip=False)
                 for lip in lastips:
-                    edge_upsert(lip, ipname, G, group="traceroute", dist=1)
+                    edge_upsert(lip, ipname, G, group=f"traceroute{traceroute_counter}", dist=1)
         else:
             ip = "??" + hex((str(Tip.split(".")[0:2])+str(lastips)).__hash__() % (256**4))
-            upsert(ip, G, group="traceroute", dist=1, real_ip=False)
+            upsert(ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False)
             for lip in lastips:
-                edge_upsert(lip, ip, G, group="traceroute", dist=1)
+                edge_upsert(lip, ip, G, group=f"traceroute{traceroute_counter}", dist=1)
             ipnames = [ip]
         lastips = ipnames
 
@@ -320,10 +332,11 @@ else:
             "cant run json p0f (looking in ./p0f \n read log with -f p0f.log\n", str(e)
         )
         exit(0)
-    try:
-        arp = openarp()
-    except Exception as e:
-        print("can't open arp tcpdump", str(e))
+    if TCPDUMP:
+        try:
+            arp = openarp()
+        except Exception as e:
+            print("can't open arp tcpdump", str(e))
 j = 0
 begin = time.time()
 lastplot = begin
@@ -395,10 +408,10 @@ def updateG(G):
             weight=(
                 G.get_edge_data(ipFrom[0], ipTo[0], {}).get(
                     "weight",
-                    1 / (float(re.sub("[^0-9]", "", gson.get("dist", "1"))) + 1),
+                    1 / (float(re.sub("[^0-9]", "", gson.get("dist", "20"))) + 1),
                 )
             ),
-            dist=gson.get("dist", "1"),
+            dist=gson.get("dist", "20"),
             mod=mod,
             link=link,
             app=app,
@@ -493,19 +506,20 @@ class tkGraph:
             f
             for f in nx.__dir__()
             if f.split("_")[-1] == "layout" and len(f.split("_")) > 1
-        ]
+        ]+["None"]
+
         self.layout_input = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
-            values=lvalues,
+            values=["multipartite_layout"] + lvalues ,
         )
         self.layout_input.place(relx=0.025, rely=VCTL_SPACE + 9 * bdiff)
         self.layout_input2 = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
-            values=lvalues,
+            values=["spring_layout"] + lvalues,
         )
         self.layout_input2.place(relx=0.025, rely=VCTL_SPACE + 11 * bdiff)
         #############################
@@ -514,9 +528,8 @@ class tkGraph:
             width=200,
             height=50,
             values=[
-                '{"nodes": "None"}',
-                '{"iterations": "5"}',
                 '{"subset_key": "group"}',
+                '{"iterations": 50}',
             ],
         )
         self.layout_input_opts.place(relx=0.025, rely=VCTL_SPACE + 10 * bdiff)
@@ -526,8 +539,7 @@ class tkGraph:
             width=200,
             height=50,
             values=[
-                '{"nodes": "None"}',
-                '{"iterations": "5"}',
+                '{"iterations": 50}',
                 '{"subset_key": "group"}',
             ],
         )
@@ -628,8 +640,10 @@ class tkGraph:
 
     def traceroute_flip(self):
         host = self.tracert_input.get()
-        if len(host.split(":")) == 2:
-            port = host.split(":")[1]
+        hsplit = host.split(":")
+        if len(hsplit) == 2:
+            port = hsplit[1]
+            host = hsplit[0]
         else:
             port = self.G.nodes.get(host).get("port", False)
         traceroute(host, self.G, port=port)
@@ -661,14 +675,15 @@ class tkGraph:
                 pos = getattr(nx, self.layout_input.get())(self.G, **opts)
             except:
                 print("error in layout 1")
-                pos = nx.spring_layout(self.G, iterations=5)
+                pos = nx.spring_layout(self.G, iterations=50)
             try:
                 opts2 = json.loads(self.layout_input_opts2.get())
+                opts2['pos'] = pos
                 pos = getattr(nx, self.layout_input2.get(), lambda G, x: x)(
                     self.G, **opts2
                 )
-            except:
-                print("error in step 2 of layout")
+            except Exception as e:
+                print("error in step 2 of layout",e)
         colors = []
         colors2 = []
         for e in self.G.edges:
