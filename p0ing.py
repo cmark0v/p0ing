@@ -230,7 +230,7 @@ def traceroute(Tip, G, port=False, timeout=5):
                 print(ips)
             ipnames = []
             for ip in ips:
-                if ipaddress.ip_address(ip).is_private and ip != myip and ip != gw:
+                if ipaddress.ip_address(ip).is_private and ip != myip and ( ip != gw and lastips[0]==myip):
                     ipname = (
                         ip
                         + "priv"
@@ -243,7 +243,7 @@ def traceroute(Tip, G, port=False, timeout=5):
                 for lip in lastips:
                     edge_upsert(lip, ipname, G, group="traceroute", dist=1)
         else:
-            ip = "??" + hex(str(Tip.split(".")[0:2]).__hash__() % (256**3))
+            ip = "??" + hex((str(Tip.split(".")[0:2])+str(lastips)).__hash__() % (256**4))
             upsert(ip, G, group="traceroute", dist=1, real_ip=False)
             for lip in lastips:
                 edge_upsert(lip, ip, G, group="traceroute", dist=1)
