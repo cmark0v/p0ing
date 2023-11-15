@@ -46,7 +46,7 @@ env vars
 - ``PASSIVE_ARP``- plot hosts discovered through other hosts(gateway broadcasts generally) arp queries default true. if false, only hosts seen sending arp responses/requests will be discovered via arp
 - ``TCPDUMP`` - toggle tcpdump bool
 
-![p0ing](icons/p0ing0.png "p0ing graph")
+![p0ing](icons/p0ing1.png "p0ing graph")
 
 
 
