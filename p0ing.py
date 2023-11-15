@@ -119,7 +119,8 @@ def upsert(ip, G, **data):
 
 
 def edge_upsert(cli, srv, G, **data):
-    if (cli, srv) in blacklist:
+    if (cli, srv) in blacklist or cli == srv:
+        print(cli, " ", srv, str(data))
         return
     edge = G.edges.get((cli, srv), False)
     if not edge:
@@ -211,6 +212,7 @@ def rm_edge(ip1, ip2):
 
 def traceroute(Tip, G, port=False, timeout=5):
     rm_edge(Tip, myip)
+    rm_edge(Tip, gw)
     print("traceroute ", Tip, "port ", port)
     if port:
         cmd = f"sudo traceroute -n -T -p {port} {Tip}"
@@ -469,7 +471,6 @@ class tkGraph:
         )
         self.edge_label_button.place(relx=0.025, rely=VCTL_SPACE + 4 * bdiff)
 
-        #############################
         self.icon_button = ctk.CTkButton(
             master=self.root,
             text="Toggle icons",
@@ -478,6 +479,15 @@ class tkGraph:
             command=self.icon_flip,
         )
         self.icon_button.place(relx=0.025, rely=VCTL_SPACE + 5 * bdiff)
+        #############################
+        self.redraw_button = ctk.CTkButton(
+            master=self.root,
+            text="redraw",
+            width=200,
+            height=50,
+            command=self.update_window,
+        )
+        self.redraw_button.place(relx=0.025, rely=VCTL_SPACE + 13 * bdiff)
         #############################
         lvalues = [
             f
@@ -490,23 +500,38 @@ class tkGraph:
             height=50,
             values=lvalues,
         )
-        self.layout_input.place(relx=0.025, rely=VCTL_SPACE + 6 * bdiff)
+        self.layout_input.place(relx=0.025, rely=VCTL_SPACE + 9 * bdiff)
         self.layout_input2 = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
             values=lvalues,
         )
-        self.layout_input2.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
+        self.layout_input2.place(relx=0.025, rely=VCTL_SPACE + 11 * bdiff)
         #############################
         self.layout_input_opts = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
-            values=['{"nodes": "None"}', '{"iterations": "5"}'],
+            values=[
+                '{"nodes": "None"}',
+                '{"iterations": "5"}',
+                '{"subset_key": "group"}',
+            ],
         )
-        self.layout_input_opts.place(relx=0.025, rely=VCTL_SPACE + 8 * bdiff)
+        self.layout_input_opts.place(relx=0.025, rely=VCTL_SPACE + 10 * bdiff)
         #############################
+        self.layout_input_opts2 = ctk.CTkComboBox(
+            self.root,
+            width=200,
+            height=50,
+            values=[
+                '{"nodes": "None"}',
+                '{"iterations": "5"}',
+                '{"subset_key": "group"}',
+            ],
+        )
+        self.layout_input_opts2.place(relx=0.025, rely=VCTL_SPACE + 12 * bdiff)
         #############################
         #############################
         #############################
@@ -517,13 +542,13 @@ class tkGraph:
             height=50,
             command=self.traceroute_flip,
         )
-        self.traceroute_button.place(relx=0.025, rely=VCTL_SPACE + 13 * bdiff)
+        self.traceroute_button.place(relx=0.025, rely=VCTL_SPACE + 7 * bdiff)
         #############################
         self.tracert_input = ctk.CTkComboBox(
             self.root, width=200, height=50, values=list(self.G.nodes)
         )
 
-        self.tracert_input.place(relx=0.025, rely=VCTL_SPACE + 12 * bdiff)
+        self.tracert_input.place(relx=0.025, rely=VCTL_SPACE + 6 * bdiff)
         #############################
         self.save_button = ctk.CTkButton(
             master=self.root,
@@ -632,13 +657,15 @@ class tkGraph:
         else:
             self.fig.set_size_inches(10, 10)
             try:
-                pos = getattr(nx, self.layout_input.get())(self.G)
+                opts = json.loads(self.layout_input_opts.get())
+                pos = getattr(nx, self.layout_input.get())(self.G, **opts)
             except:
+                print("error in layout 1")
                 pos = nx.spring_layout(self.G, iterations=5)
             try:
-                opts = json.loads(self.layout_input_opts.get())
+                opts2 = json.loads(self.layout_input_opts2.get())
                 pos = getattr(nx, self.layout_input2.get(), lambda G, x: x)(
-                    self.G, **opts
+                    self.G, **opts2
                 )
             except:
                 print("error in step 2 of layout")
