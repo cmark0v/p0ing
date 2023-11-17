@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import mapplot
 import fcntl
 import os
@@ -14,6 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import time
 import graphviz
+
 try:
     import jsonofabitch.jsonofabitch as json
 except:
@@ -32,9 +34,13 @@ PLOTX = 0.2
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
 ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
-TCPDUMP = os.getenv("TCPDUMP", "t").lower() in YES  # how often to read buffer and refresh
+TCPDUMP = (
+    os.getenv("TCPDUMP", "t").lower() in YES
+)  # how often to read buffer and refresh
 
-PASSIVE_ARP = os.getenv("PASSIVE_ARP", 't') in YES  # how often to read buffer and refresh
+PASSIVE_ARP = (
+    os.getenv("PASSIVE_ARP", "t") in YES
+)  # how often to read buffer and refresh
 VCTL_SPACE = 0.1
 EDGE_LABELS = (
     os.getenv("EDGE_LABELS", "t").lower() in YES
@@ -42,13 +48,7 @@ EDGE_LABELS = (
 VERBOSE = (os.getenv("VERBOSE", "f").lower() in YES) or ("-v" in sys.argv)
 if VERBOSE:
     sys.argv.remove("-v")
-GEOPLOT = (
-    os.getenv("GEOPLOT", "f").lower() in YES
-)  # how often to read buffer and refresh
 
-MAP = (
-    os.getenv("MAP", str(GEOPLOT)).lower() in YES
-)  # how often to read buffer and refresh
 EDGE_COLOR_BY = os.getenv(
     "EDGE_COLOR_BY", "port"  # dotted foreground of edge
 )  # graph data field to color code edges by in plotting
@@ -61,7 +61,8 @@ dev = re.findall("dev (.+?) ", lines[0])[0]
 gw = re.findall("default via (.+?) ", lines[0])[0]
 routes = dict()
 blacklist = set()
-traceroute_counter=0
+traceroute_counter = 0
+
 
 def non_block_read(output):
     fd = output.fileno()
@@ -221,8 +222,8 @@ def rm_edge(ip1, ip2):
 
 def traceroute(Tip, G, port=False, timeout=5):
     global traceroute_counter
-    traceroute_counter=traceroute_counter+1
-    upsert(Tip,G,group=f"traceroute{traceroute_counter}")
+    traceroute_counter = traceroute_counter + 1
+    upsert(Tip, G, group=f"traceroute{traceroute_counter}")
     rm_edge(Tip, myip)
     rm_edge(Tip, gw)
     print("traceroute ", Tip, "port ", port)
@@ -242,7 +243,11 @@ def traceroute(Tip, G, port=False, timeout=5):
                 print(ips)
             ipnames = []
             for ip in ips:
-                if ipaddress.ip_address(ip).is_private and ip != myip and ( ip != gw and lastips[0]==myip):
+                if (
+                    ipaddress.ip_address(ip).is_private
+                    and ip != myip
+                    and (ip != gw and lastips[0] == myip)
+                ):
                     ipname = (
                         ip
                         + "priv"
@@ -251,12 +256,20 @@ def traceroute(Tip, G, port=False, timeout=5):
                 else:
                     ipname = ip
                 ipnames.append(ipname)
-                upsert(ipname, G, group=f"traceroute{traceroute_counter}", real_ip=False)
+                upsert(
+                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=False
+                )
                 for lip in lastips:
-                    edge_upsert(lip, ipname, G, group=f"traceroute{traceroute_counter}", dist=1)
+                    edge_upsert(
+                        lip, ipname, G, group=f"traceroute{traceroute_counter}", dist=1
+                    )
         else:
-            ip = "??" + hex((str(Tip.split(".")[0:2])+str(lastips)).__hash__() % (256**4))
-            upsert(ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False)
+            ip = "??" + hex(
+                (str(Tip.split(".")[0:2]) + str(lastips)).__hash__() % (256**4)
+            )
+            upsert(
+                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False
+            )
             for lip in lastips:
                 edge_upsert(lip, ip, G, group=f"traceroute{traceroute_counter}", dist=1)
             ipnames = [ip]
@@ -451,18 +464,14 @@ class tkGraph:
         )
         self.button.place(relx=0.025, rely=VCTL_SPACE)
         #############################
-        if GEOPLOT:
-            maptext = "Toggle Map"
-        else:
-            maptext = "make map with ipinfo.io geodata"
-        self.map_button = ctk.CTkButton(
-            master=self.root,
-            text=maptext,
-            width=200,
-            height=50,
-            command=self.mapflip,
-        )
-        self.map_button.place(relx=0.025, rely=VCTL_SPACE + 2 * bdiff)
+        #        self.map_button = ctk.CTkButton(
+        #            master=self.root,
+        #            text="FREE",
+        #            width=200,
+        #            height=50,
+        #            command=self.mapflip,
+        #        )
+        #        self.map_button.place(relx=0.025, rely=VCTL_SPACE + 2 * bdiff)
 
         #############################
         self.label_button = ctk.CTkButton(
@@ -506,20 +515,20 @@ class tkGraph:
             f
             for f in nx.__dir__()
             if f.split("_")[-1] == "layout" and len(f.split("_")) > 1
-        ]+["None"]
-
+        ]
+        otherlayouts = ["none", "geopy_map", "geolocation"]
         self.layout_input = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
-            values=["multipartite_layout"] + lvalues ,
+            values=["multipartite_layout"] + lvalues + otherlayouts,
         )
         self.layout_input.place(relx=0.025, rely=VCTL_SPACE + 9 * bdiff)
         self.layout_input2 = ctk.CTkComboBox(
             self.root,
             width=200,
             height=50,
-            values=["spring_layout"] + lvalues,
+            values=["spring_layout"] + lvalues + ["none"],
         )
         self.layout_input2.place(relx=0.025, rely=VCTL_SPACE + 11 * bdiff)
         #############################
@@ -623,16 +632,6 @@ class tkGraph:
         LABELS = LABELS ^ True
         self.update_window()
 
-    def mapflip(self):
-        global GEOPLOT
-        global MAP
-        if GEOPLOT:
-            MAP = MAP ^ True
-        else:
-            GEOPLOT = True
-            MAP = True
-        self.update_window()
-
     def prune_flip(self):
         global PRUNE
         PRUNE = PRUNE ^ True
@@ -662,30 +661,36 @@ class tkGraph:
         plt.close()
         self.fig, self.ax = plt.subplots()
         N = len(list(self.G.nodes))
-        if GEOPLOT:
+        layout1 = self.layout_input.get()
+        layout2 = self.layout_input2.get()
+        MAP = False
+        if layout1 == "geopy_map":
+            MAP = True
             self.fig.set_size_inches(12, 10)
-            pos = mapplot.geoplot(self.G, None, draw_map=MAP)
-            if not MAP:
-                pos = mapplot.mkgeo_cluster_layout(G, pos)
-                # pos = nx.spring_layout(self.G, pos=posp, iterations=5)
-        else:
-            self.fig.set_size_inches(10, 10)
+            pos = mapplot.geoplot(self.G, None, draw_map=True)
+        elif layout1 == "geolocation":
+            geopos = mapplot.geoplot(self.G, None, draw_map=False)
+            pos = mapplot.mkgeo_cluster_layout(G, geopos)
+        elif layout1 != "none":
             try:
                 opts = json.loads(self.layout_input_opts.get())
-                pos = getattr(nx, self.layout_input.get())(self.G, **opts)
+                pos = getattr(nx, layout1)(self.G, **opts)
             except:
-                print("error in layout 1")
+                print("error in layout 1, using spring")
                 pos = nx.spring_layout(self.G, iterations=50)
+        else:
+            print("no layout 1")
+        if layout2 != None:
             try:
                 opts2 = json.loads(self.layout_input_opts2.get())
-                opts2['pos'] = pos
-                pos = getattr(nx, self.layout_input2.get(), lambda G, x: x)(
-                    self.G, **opts2
-                )
+                opts2["pos"] = pos
+                pos = getattr(nx, layout2, lambda G, x: x)(self.G, **opts2)
             except Exception as e:
-                print("error in step 2 of layout",e)
+                print("error in step 2 of layout", e)
         colors = []
         colors2 = []
+        if not MAP:
+            self.fig.set_size_inches(10, 10)
         for e in self.G.edges:
             gv = self.G.get_edge_data(e[0], e[1]).get(EDGE_COLOR_BY_BG)
             gv2 = self.G.get_edge_data(e[0], e[1]).get(EDGE_COLOR_BY)
