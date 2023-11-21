@@ -13,6 +13,7 @@ load_dotenv()
 IPINFOTOKEN = os.getenv("IPINFOTOKEN", "")
 from geopy import distance
 
+VERBOSE = os.getenv("VERBOSE", "")
 ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
 
 
@@ -33,19 +34,27 @@ def mkgeo_cluster_layout(G, pos_map):
     return pos
 
 
+def get_gps_of_node(e):
+    loc = n.get("ipinfo_loc", False)
+    n = G.nodes.get(e)
+    if not loc:
+        if n.get("real_ip", True):
+            info = getipinfo(e)
+        else:
+            info = get_gps_of_node(n.get("last_real_ip", ""))
+        if VERBOSE:
+            print(info)
+        lat, log = info.get("loc", "0,0").split(",")
+        for k in info.keys():
+            n["ipinfo_" + k] = info[k]
+    else:
+        lat, log = loc.split(",")
+
 def getgps(G):
     lats = []
     logs = []
     for e in G.nodes:
-        loc = G.nodes.get(e).get("ipinfo_loc", False)
-        if not loc:
-            info = getipinfo(e)
-            # print(info)
-            lat, log = info.get("loc", "0,0").split(",")
-            for k in info.keys():
-                G.nodes.get(e)["ipinfo_" + k] = info[k]
-        else:
-            lat, log = loc.split(",")
+        lat,log = get_gps_of_node(e)
         lats.append(float(lat))
         logs.append(float(log))
     return logs, lats
@@ -54,6 +63,8 @@ def getgps(G):
 def getipinfo(ip):
     try:
         ippriv = ipaddress.ip_address(ip).is_private
+        # if the ip is a private network reserved range
+        # the only such ips that should make it here are the local ones on the LAN, others are masked
     except:
         ippriv = True
     if ippriv:

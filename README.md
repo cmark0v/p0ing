@@ -58,14 +58,16 @@ env vars
 --------
 
 - ``TKINT`` - ``true`` default, show tkinter interface, otherwise just generate pyvis html
-- ``EDGE_COLOR_BY_BG`` - background edge(the edges are overlapping 50% transparency and foreground edge is dashed. defaults to ``group``
 - ``EDGE_COLOR_BY``  - color edge by data field ``port, group, app, dist, link, mod`` defaults to ``port``. color is generated from hash of field values
-- ``GEOPLOT``- plot on map? (not totally passive, sends traffic to ipinfo
+- ``EDGE_COLOR_BY_BG`` - background edge(the edges are overlapping 50% transparency and foreground edge is dashed. defaults to ``group``
 - ``REPLOT`` -  time between refresh in seconds
 - ``LABELS`` -  bool plot node labels(ips) in pic
+- ``EDGE_LABELS`` -  bool plot edge labels(ips) in pic
+- ``ICONS`` - plot icons on nodes
+- ``VERBOSE`` - more stdout messages
 - ``IPINFOTOKEN`` - ipinfo.io API auth token, can go in .env, only used in geoplot. 
-- ``PASSIVE_ARP``- plot hosts discovered through other hosts(gateway broadcasts generally) arp queries default true. if false, only hosts seen sending arp responses/requests will be discovered via arp
-- ``TCPDUMP`` - toggle tcpdump bool
+- ``PASSIVE_ARP``- plot hosts discovered through other hosts(gateway broadcasts generally) arp queries default true. if false, only hosts seen sending arp responses/requests will be discovered via arp. 
+- ``TCPDUMP`` - toggle tcpdump bool, removes all passive arp and any active arp host discovery. the arp table is read into the hosts file on init still though
 
 ![p0ing](icons/p0ing1.png "p0ing graph")
 

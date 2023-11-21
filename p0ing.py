@@ -236,6 +236,7 @@ def traceroute(Tip, G, port=False, timeout=5):
     tr.kill()
     lines = tr.stdout.readlines()
     lastips = [myip]
+    lastrealip=myip
     for jj, l in enumerate(lines):
         ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l)
         if len(ips) > 0:
@@ -253,11 +254,15 @@ def traceroute(Tip, G, port=False, timeout=5):
                         + "priv"
                         + hex(str(ip + lastips[0]).__hash__() % (256**2))[2::]
                     )
+                    real_ip=False
+
                 else:
                     ipname = ip
+                    real_ip = True
+                    lastrealip=ip
                 ipnames.append(ipname)
                 upsert(
-                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=False
+                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=real_ip,last_real_ip=lastrealip
                 )
                 for lip in lastips:
                     edge_upsert(
@@ -268,8 +273,8 @@ def traceroute(Tip, G, port=False, timeout=5):
                 (str(Tip.split(".")[0:2]) + str(lastips)).__hash__() % (256**4)
             )
             upsert(
-                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False
-            )
+                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False,last_real_ip=lastrealip
+                )
             for lip in lastips:
                 edge_upsert(lip, ip, G, group=f"traceroute{traceroute_counter}", dist=1)
             ipnames = [ip]
