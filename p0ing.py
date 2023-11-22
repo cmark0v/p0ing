@@ -108,8 +108,12 @@ def upsert(ip, G, **data):
             data["image"] = graphviz.geticon(data.get("gson", dict()))
         try:
             ipc = ipaddress.ip_address(ip)
-            data["ip4"]=ip
+            data["ip4"] = ip
+            if data.get("real_ip",None) is None:
+                data["real_ip"]=True
         except:
+            if data.get("real_ip",None) is None:
+                data["real_ip"]=False
             G.add_node(ip, **data)
             return
         G.add_node(ip, **data)
@@ -222,24 +226,27 @@ def rm_edge(ip1, ip2):
         pass
 
 
-def traceroute(Tip, G, port=False, timeout=5):
+def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
     global traceroute_counter
     traceroute_counter = traceroute_counter + 1
     upsert(Tip, G, group=f"traceroute{traceroute_counter}")
-    rm_edge(Tip, myip)
-    rm_edge(Tip, gw)
     print("traceroute ", Tip, "port ", port)
     if port:
-        cmd = f"sudo traceroute -n -T -p {port} {Tip}"
+        cmd = f"sudo traceroute -n -m {maxhops} -T -p {port} {Tip}"
     else:
-        cmd = f"traceroute -n {Tip}"
+        cmd = f"traceroute -m {maxhops} -n {Tip}"
     tr = Popen(cmd, shell=True, stdout=PIPE, text=True)
     time.sleep(timeout)
     tr.kill()
     lines = tr.stdout.readlines()
     lastips = [myip]
-    lastrealip=myip
-    for jj, l in enumerate(lines):
+    lastrealip = myip
+    if len(lines) >= maxhops and lines[-1].find(Tip) == -1:
+        print("traceroute failure ", Tip)
+        return
+    rm_edge(Tip, myip)
+    # rm_edge(Tip, gw)
+    for jj, l in enumerate(lines[1::]):
         ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l)
         if len(ips) > 0:
             if VERBOSE:
@@ -256,15 +263,20 @@ def traceroute(Tip, G, port=False, timeout=5):
                         + "priv"
                         + hex(str(ip + lastips[0]).__hash__() % (256**2))[2::]
                     )
-                    real_ip=False
+                    real_ip = False
 
                 else:
                     ipname = ip
                     real_ip = True
-                    lastrealip=ip
+                    lastrealip = ip
                 ipnames.append(ipname)
                 upsert(
-                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=real_ip,last_real_ip=lastrealip,ip4=ip
+                    ipname,
+                    G,
+                    group=f"traceroute{traceroute_counter}",
+                    real_ip=real_ip,
+                    last_real_ip=lastrealip,
+                    ip4=ip,
                 )
                 for lip in lastips:
                     edge_upsert(
@@ -275,8 +287,14 @@ def traceroute(Tip, G, port=False, timeout=5):
                 (str(Tip.split(".")[0:2]) + str(lastips)).__hash__() % (256**4)
             )
             upsert(
-                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False,last_real_ip=lastrealip,ip4=None
-                )
+                ip,
+                G,
+                group=f"traceroute{traceroute_counter}",
+                dist=1,
+                real_ip=False,
+                last_real_ip=lastrealip,
+                ip4=None,
+            )
             for lip in lastips:
                 edge_upsert(lip, ip, G, group=f"traceroute{traceroute_counter}", dist=1)
             ipnames = [ip]
@@ -650,7 +668,9 @@ class tkGraph:
         if len(hsplit) == 2:
             port = hsplit[1]
             host = hsplit[0]
+            upsert(host,self.G)
         else:
+            upsert(host,self.G)
             port = self.G.nodes.get(host).get("port", False)
         traceroute(host, self.G, port=port)
 
@@ -675,6 +695,7 @@ class tkGraph:
             MAP = True
             self.fig.set_size_inches(12, 10)
             pos = mapplot.geoplot(self.G, None, draw_map=True)
+            layout2 = "none"
         elif layout1 == "geolocation":
             geopos = mapplot.geoplot(self.G, None, draw_map=False)
             pos = mapplot.mkgeo_cluster_layout(G, geopos)

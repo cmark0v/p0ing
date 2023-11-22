@@ -34,14 +34,13 @@ def mkgeo_cluster_layout(G, pos_map):
     return pos
 
 
-def get_gps_of_node(e):
+def get_gps_of_node(n):
     loc = n.get("ipinfo_loc", False)
-    n = G.nodes.get(e)
     if not loc:
         if n.get("real_ip", True):
-            info = getipinfo(e)
+            info = getipinfo(n.get("ip4"))
         else:
-            info = get_gps_of_node(n.get("last_real_ip", ""))
+            info = getipinfo(n.get("last_real_ip", ""))
         if VERBOSE:
             print(info)
         lat, log = info.get("loc", "0,0").split(",")
@@ -49,12 +48,13 @@ def get_gps_of_node(e):
             n["ipinfo_" + k] = info[k]
     else:
         lat, log = loc.split(",")
+    return lat,log
 
 def getgps(G):
     lats = []
     logs = []
     for e in G.nodes:
-        lat,log = get_gps_of_node(e)
+        lat,log = get_gps_of_node(G.nodes[e])
         lats.append(float(lat))
         logs.append(float(log))
     return logs, lats
