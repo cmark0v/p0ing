@@ -106,11 +106,13 @@ def upsert(ip, G, **data):
         data["country"] = country
         if not data.get("image", False):
             data["image"] = graphviz.geticon(data.get("gson", dict()))
-        G.add_node(ip, **data)
         try:
             ipc = ipaddress.ip_address(ip)
+            data["ip4"]=ip
         except:
+            G.add_node(ip, **data)
             return
+        G.add_node(ip, **data)
         if ipc in mynet.hosts() and ip != myip:
             edge_upsert(myip, ip, G, group="arp", dist=1)
             edge_upsert(ip, myip, G, group="arp", dist=1)
@@ -262,7 +264,7 @@ def traceroute(Tip, G, port=False, timeout=5):
                     lastrealip=ip
                 ipnames.append(ipname)
                 upsert(
-                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=real_ip,last_real_ip=lastrealip
+                    ipname, G, group=f"traceroute{traceroute_counter}", real_ip=real_ip,last_real_ip=lastrealip,ip4=ip
                 )
                 for lip in lastips:
                     edge_upsert(
@@ -273,7 +275,7 @@ def traceroute(Tip, G, port=False, timeout=5):
                 (str(Tip.split(".")[0:2]) + str(lastips)).__hash__() % (256**4)
             )
             upsert(
-                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False,last_real_ip=lastrealip
+                ip, G, group=f"traceroute{traceroute_counter}", dist=1, real_ip=False,last_real_ip=lastrealip,ip4=None
                 )
             for lip in lastips:
                 edge_upsert(lip, ip, G, group=f"traceroute{traceroute_counter}", dist=1)
