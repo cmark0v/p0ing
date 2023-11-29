@@ -1,21 +1,25 @@
 #!/usr/bin/python
+
+from enviscerate import env
+DAEMON = env(False)
 import mapplot
 import fcntl
 import os
 from subprocess import *
 
 import socket
-import customtkinter as ctk
-import networkx as nx
-import PIL
-
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+if not DAEMON:
+    import customtkinter as ctk
+    import networkx as nx
+    import PIL
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    import graphviz
 
 
 import time
-import graphviz
 
+from geticon import geticon
 try:
     import jsonofabitch.jsonofabitch as json
 except:
@@ -26,11 +30,12 @@ import sys
 import re
 import ipaddress
 
-YES = ["t", "true", "1", "yes", "y", "on"]
+YES = ["t", "true", "1", "yes", "y"]
 
 from getflag import getflag
 
-PLOTX = 0.2
+
+TKINT = env(True)
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
 ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
@@ -53,7 +58,7 @@ EDGE_COLOR_BY = os.getenv(
     "EDGE_COLOR_BY", "port"  # dotted foreground of edge
 )  # graph data field to color code edges by in plotting
 EDGE_COLOR_BY_BG = os.getenv("EDGE_COLOR_BY_BG", "group")  # BG of edge
-TKINT = os.getenv("TKINT", "t").lower() in YES
+gui_border = 0.2
 ipr = os.popen("ip route|grep -v linkdown")
 lines = ipr.readlines()
 ipr.close()
@@ -98,6 +103,9 @@ G = nx.DiGraph()
 
 
 def upsert(ip, G, **data):
+    if DAEMON:
+        print(json.dumps([ip,data])
+        return
     node = G.nodes.get(ip, False)
     if not node:
         flag, country = getflag(ip)
@@ -105,7 +113,7 @@ def upsert(ip, G, **data):
         data["shape"] = "image"  # for pyvis
         data["country"] = country
         if not data.get("image", False):
-            data["image"] = graphviz.geticon(data.get("gson", dict()))
+            data["image"] = geticon(data.get("gson", dict()))
         try:
             ipc = ipaddress.ip_address(ip)
             data["ip4"] = ip
@@ -125,7 +133,7 @@ def upsert(ip, G, **data):
             if not node.get(k, False):
                 G.nodes.get(ip)[k] = data[k]
         image = G.nodes.get(ip)["image"]
-        G.nodes.get(ip)["image"] = graphviz.geticon(
+        G.nodes.get(ip)["image"] = geticon(
             data.get("gson", dict()), default=image
         )
     if VERBOSE:
@@ -135,6 +143,9 @@ def upsert(ip, G, **data):
 def edge_upsert(cli, srv, G, **data):
     if (cli, srv) in blacklist or cli == srv:
         print(cli, " ", srv, str(data))
+        return
+    if DAEMON:
+        print(json.dumps([cli,srv,data]))
         return
     edge = G.edges.get((cli, srv), False)
     if not edge:
@@ -315,14 +326,14 @@ upsert(
     G,
     label="me",
     group="arp_active",
-    image=graphviz.geticon(dict(), name="james"),
+    image=geticon(dict(), name="james"),
 )
 upsert(
     gw,
     G,
     label="gateway",
     group="arp_active",
-    image=graphviz.geticon(dict(), name="cisco"),
+    image=geticon(dict(), name="cisco"),
 )
 G.add_edge(myip, gw, group="arp", label="default", dist=1)
 G.add_edge(gw, myip, group="arp", label="default", dist=1)
@@ -338,7 +349,7 @@ for a in arptable:
             ip,
             G,
             group="arp_active",
-            image=graphviz.geticon(dict(), name="computer"),
+            image=geticon(dict(), name="computer"),
         )
         G.add_edge(myip, ip, group="arp")
         G.add_edge(ip, myip, group="arp")
@@ -422,7 +433,7 @@ def updateG(G):
             country=csubj,
             group="p0f",
             shape="image",
-            image=graphviz.geticon(gson),
+            image=geticon(gson),
             os=gson.get("os", False),
         )
         upsert(
@@ -432,7 +443,7 @@ def updateG(G):
             flag=flagobj,
             country=cobj,
             shape="image",
-            image=graphviz.geticon(dict(), name="computer"),
+            image=geticon(dict(), name="computer"),
         )
         mod = gson.get("mod", "")
         app = gson.get("app", "")
@@ -476,10 +487,10 @@ class tkGraph:
         self.frame = ctk.CTkFrame(
             master=self.root,
             height=self.root.winfo_height() * 0.95,
-            width=self.root.winfo_width() * (1 - PLOTX),
+            width=self.root.winfo_width() * (1 - gui_border),
             fg_color="darkblue",
         )
-        self.frame.place(relx=PLOTX, rely=0.025)
+        self.frame.place(relx=gui_border, rely=0.025)
         self.button = ctk.CTkButton(
             master=self.root,
             text="pyvis plot",
@@ -791,7 +802,7 @@ class tkGraph:
         self.ax.axis("off")
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         canvas.draw()
-        canvas.get_tk_widget().place(relx=PLOTX, rely=0.025)
+        canvas.get_tk_widget().place(relx=gui_border, rely=0.025)
         self.canvas = canvas
         self.root.update()
 
@@ -811,13 +822,13 @@ class tkGraph:
         self.G = updateG(self.G)
 
 
-if TKINT:
+if TKINT and not DAEMON:
     tkGraph(G)
 else:
     while 1:
         N = len(list(G.nodes))
         G = updateG(G)
         N2 = len(list(G.nodes))
-        if N2 != N:
+        if N2 != N and not DAEMON:
             pyvisplot(G)
         time.sleep(REPLOT)
