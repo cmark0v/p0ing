@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from enviscerate import env
+
 DAEMON = env(False)
 import mapplot
 import fcntl
@@ -8,6 +9,7 @@ import os
 from subprocess import *
 
 import socket
+
 if not DAEMON:
     import customtkinter as ctk
     import networkx as nx
@@ -18,8 +20,9 @@ if not DAEMON:
 
 
 import time
-
+from procarp import procarp
 from geticon import geticon
+
 try:
     import jsonofabitch.jsonofabitch as json
 except:
@@ -30,43 +33,40 @@ import sys
 import re
 import ipaddress
 
-YES = ["t", "true", "1", "yes", "y"]
 
 from getflag import getflag
 
 
 TKINT = env(True)
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
-LABELS = os.getenv("LABELS", "t").lower() in YES  # how often to read buffer and refresh
-ICONS = os.getenv("ICONS", "t").lower() in YES  # how often to read buffer and refresh
-TCPDUMP = (
-    os.getenv("TCPDUMP", "t").lower() in YES
-)  # how often to read buffer and refresh
-
-PASSIVE_ARP = (
-    os.getenv("PASSIVE_ARP", "t") in YES
-)  # how often to read buffer and refresh
-VCTL_SPACE = 0.1
-EDGE_LABELS = (
-    os.getenv("EDGE_LABELS", "t").lower() in YES
-)  # how often to read buffer and refresh
-VERBOSE = (os.getenv("VERBOSE", "f").lower() in YES) or ("-v" in sys.argv)
+LABELS = env(True)  # how often to read buffer and refresh
+ICONS = env(True)  # how often to read buffer and refresh
+TCPDUMP = env(True)  # how often to read buffer and refresh
+PASSIVE_ARP = env(True)  # how often to read buffer and refresh
+EDGE_LABELS = env(True)  # how often to read buffer and refresh
+VERBOSE = (env(False)) or ("-v" in sys.argv)
 if VERBOSE:
     sys.argv.remove("-v")
 
-EDGE_COLOR_BY = os.getenv(
-    "EDGE_COLOR_BY", "port"  # dotted foreground of edge
-)  # graph data field to color code edges by in plotting
-EDGE_COLOR_BY_BG = os.getenv("EDGE_COLOR_BY_BG", "group")  # BG of edge
+EDGE_COLOR_BY = env("port")  # dotted foreground of edge
+# graph data field to color code edges by in plotting
+EDGE_COLOR_BY_BG = env("group")  # BG of edge
+
+dev, myip, gw, mynet, routes = procarp()
+VCTL_SPACE = 0.1
 gui_border = 0.2
-ipr = os.popen("ip route|grep -v linkdown")
-lines = ipr.readlines()
-ipr.close()
-dev = re.findall("dev (.+?) ", lines[0])[0]
-gw = re.findall("default via (.+?) ", lines[0])[0]
-routes = dict()
 blacklist = set()
 traceroute_counter = 0
+try:
+    IFACE = re.findall("/dev/(.+)", sys.argv[1])[0]
+except:
+    IFACE = dev
+
+
+if DAEMON:
+    G = None
+else:
+    G = nx.DiGraph()
 
 
 def non_block_read(output):
@@ -79,33 +79,15 @@ def non_block_read(output):
         return ""
 
 
-for l in lines:
-    try:
-        netip = re.findall(
-            f"(.*?) dev {dev} proto kernel scope link src (.*?) ", l
-        ).pop()
-        myip = netip[1]
-        mynet = ipaddress.ip_network(netip[0])
-        routes[myip] = []
-        routes[myip].append(
-            re.findall(
-                f"(.*) dev {dev} proto kernel scope link src {myip} metric 100", l
-            ).pop()
-        )
-    except Exception as e:
-        print(e)
-try:
-    IFACE = re.findall("/dev/(.+)", sys.argv[1])[0]
-except:
-    IFACE = dev
-print(dev, " ", myip)
-G = nx.DiGraph()
-
-
 def upsert(ip, G, **data):
     if DAEMON:
-        print(json.dumps([ip,data])
+        print(json.dumps([ip, data]))
         return
+    else:
+        graph_upsert(ip, G, **data)
+
+
+def graph_upsert(ip, G, **data):
     node = G.nodes.get(ip, False)
     if not node:
         flag, country = getflag(ip)
@@ -117,11 +99,11 @@ def upsert(ip, G, **data):
         try:
             ipc = ipaddress.ip_address(ip)
             data["ip4"] = ip
-            if data.get("real_ip",None) is None:
-                data["real_ip"]=True
+            if data.get("real_ip", None) is None:
+                data["real_ip"] = True
         except:
-            if data.get("real_ip",None) is None:
-                data["real_ip"]=False
+            if data.get("real_ip", None) is None:
+                data["real_ip"] = False
             G.add_node(ip, **data)
             return
         G.add_node(ip, **data)
@@ -133,20 +115,24 @@ def upsert(ip, G, **data):
             if not node.get(k, False):
                 G.nodes.get(ip)[k] = data[k]
         image = G.nodes.get(ip)["image"]
-        G.nodes.get(ip)["image"] = geticon(
-            data.get("gson", dict()), default=image
-        )
+        G.nodes.get(ip)["image"] = geticon(data.get("gson", dict()), default=image)
     if VERBOSE:
         print(f"insert {ip}")
 
 
 def edge_upsert(cli, srv, G, **data):
     if (cli, srv) in blacklist or cli == srv:
-        print(cli, " ", srv, str(data))
+        if VERBOSE:
+            print(cli, " ", srv, str(data))
         return
     if DAEMON:
-        print(json.dumps([cli,srv,data]))
+        print(json.dumps([cli, srv, data]))
         return
+    else:
+        graph_edge_upsert(cli, srv, G, **data)
+
+
+def graph_edge_upsert(cli, srv, G, **data):
     edge = G.edges.get((cli, srv), False)
     if not edge:
         G.add_edge(cli, srv, **data)
@@ -154,6 +140,9 @@ def edge_upsert(cli, srv, G, **data):
         for k in data.keys():
             if not edge.get(k, False):
                 G.edges.get((cli, srv))[k] = data[k]
+    G.edges.get((cli, srv))["weight"] = G.get_edge_data(cli, srv, {}).get(
+        "weight", 1 / (data.get("dist") + 1)
+    )
 
 
 def hashcolor(strr):
@@ -222,7 +211,7 @@ def parsearp(G, arp):
             edge_upsert(r, by, G, group="arp_reply", dist=1)
             if VERBOSE:
                 print(by, " ask for ", r)
-        else:
+        elif not DAEMON:
             print("arp reply from ", r, " to unknown")
 
 
@@ -335,8 +324,8 @@ upsert(
     group="arp_active",
     image=geticon(dict(), name="cisco"),
 )
-G.add_edge(myip, gw, group="arp", label="default", dist=1)
-G.add_edge(gw, myip, group="arp", label="default", dist=1)
+edge_upsert(myip, gw, G, group="arp", label="default", dist=1)
+edge_upsert(gw, myip, G, group="arp", label="default", dist=1)
 arp = os.popen("arp -na -i %s" % (IFACE,))
 stub = []
 stub_by = []
@@ -351,8 +340,8 @@ for a in arptable:
             group="arp_active",
             image=geticon(dict(), name="computer"),
         )
-        G.add_edge(myip, ip, group="arp")
-        G.add_edge(ip, myip, group="arp")
+        edge_upsert(myip, ip, G, group="arp")
+        edge_upsert(ip, myip, G, group="arp")
 
 if len(sys.argv) > 1:
     if sys.argv[1] == "-j" or sys.argv[1] == "--json":
@@ -371,11 +360,12 @@ if len(sys.argv) > 1:
         traceroute(sys.argv[2], G, port=port)
 else:
     try:
-        print("starting p0f")
+        if not DAEMON:
+            print("starting p0f")
+            print("reading live with json-p0f")
         p0f = Popen("(cd p0f; sudo ./p0f|tee ../p0fjson.log )", shell=True, stdout=PIPE)
         readjson = True
         readlive = True
-        print("reading live with json-p0f")
     except Exception as e:
         print(
             "cant run json p0f (looking in ./p0f \n read log with -f p0f.log\n", str(e)
@@ -386,6 +376,8 @@ else:
             arp = openarp()
         except Exception as e:
             print("can't open arp tcpdump", str(e))
+            if DAEMON:
+                exit(0)
 j = 0
 begin = time.time()
 lastplot = begin
@@ -454,13 +446,7 @@ def updateG(G):
             G,
             port=ipTo[1],
             cli_port=ipFrom[1],
-            weight=(
-                G.get_edge_data(ipFrom[0], ipTo[0], {}).get(
-                    "weight",
-                    1 / (float(re.sub("[^0-9]", "", gson.get("dist", "20"))) + 1),
-                )
-            ),
-            dist=gson.get("dist", "20"),
+            dist=float(re.sub("[^0-9]", "", gson.get("dist", "20"))),
             mod=mod,
             link=link,
             app=app,
@@ -679,9 +665,9 @@ class tkGraph:
         if len(hsplit) == 2:
             port = hsplit[1]
             host = hsplit[0]
-            upsert(host,self.G)
+            upsert(host, self.G)
         else:
-            upsert(host,self.G)
+            upsert(host, self.G)
             port = self.G.nodes.get(host).get("port", False)
         traceroute(host, self.G, port=port)
 
@@ -826,9 +812,12 @@ if TKINT and not DAEMON:
     tkGraph(G)
 else:
     while 1:
-        N = len(list(G.nodes))
-        G = updateG(G)
-        N2 = len(list(G.nodes))
-        if N2 != N and not DAEMON:
-            pyvisplot(G)
+        if not DAEMON:
+            N = len(list(G.nodes))
+            G = updateG(G)
+            N2 = len(list(G.nodes))
+            if N2 != N:
+                pyvisplot(G)
+        else:
+            updateG(G)
         time.sleep(REPLOT)
