@@ -1,9 +1,8 @@
 #!/usr/bin/python
-
+import signal
 from enviscerate import env
 
 DAEMON = env(False)
-import mapplot
 import fcntl
 import os
 from subprocess import *
@@ -11,6 +10,7 @@ from subprocess import *
 import socket
 
 if not DAEMON:
+    import mapplot
     import customtkinter as ctk
     import networkx as nx
     import PIL
@@ -33,9 +33,31 @@ import sys
 import re
 import ipaddress
 
-
 from getflag import getflag
 
+
+muhprocs = []
+
+
+def muhpopen(cmd,**argz):
+    global muhprocs
+    proc = Popen(cmd,**argz)
+    muhprocs.append(proc)
+    return proc
+
+
+def exithandler(sig, frame):
+    global muhprocs
+    print("exiting")
+    for m in muhprocs:
+        try:
+            m.kill()
+        except Excepting as e:
+            print(e)
+        sys.exit(0)
+
+
+signal.signal(signal.SIGINT, exithandler)
 
 TKINT = env(True)
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
@@ -153,7 +175,7 @@ def hashcolor(strr):
 
 
 def openarp():
-    arp = Popen(
+    arp = muhpopen(
         "sudo tcpdump -vvv -n arp|tee ./arp.log ",
         stdout=PIPE,
         shell=True,
@@ -235,7 +257,7 @@ def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
         cmd = f"sudo traceroute -n -m {maxhops} -T -p {port} {Tip}"
     else:
         cmd = f"traceroute -m {maxhops} -n {Tip}"
-    tr = Popen(cmd, shell=True, stdout=PIPE, text=True)
+    tr = muhpopen(cmd, shell=True, stdout=PIPE, text=True)
     time.sleep(timeout)
     tr.kill()
     lines = tr.stdout.readlines()
@@ -363,7 +385,9 @@ else:
         if not DAEMON:
             print("starting p0f")
             print("reading live with json-p0f")
-        p0f = Popen("(cd p0f; sudo ./p0f|tee ../p0fjson.log )", shell=True, stdout=PIPE)
+        p0f = muhpopen(
+            "(cd p0f; sudo ./p0f|tee ../p0fjson.log )", shell=True, stdout=PIPE
+        )
         readjson = True
         readlive = True
     except Exception as e:
