@@ -39,9 +39,9 @@ from getflag import getflag
 muhprocs = []
 
 
-def muhpopen(cmd,**argz):
+def muhpopen(cmd, **argz):
     global muhprocs
-    proc = Popen(cmd,**argz)
+    proc = Popen(cmd, **argz)
     muhprocs.append(proc)
     return proc
 
@@ -58,7 +58,8 @@ def exithandler(sig, frame):
 
 
 signal.signal(signal.SIGINT, exithandler)
-
+NODE_COLOR_FIELD = env("group")
+NODE_SIZE = env(10)
 TKINT = env(True)
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = env(True)  # how often to read buffer and refresh
@@ -116,6 +117,7 @@ def graph_upsert(ip, G, **data):
         data["flag"] = flag
         data["shape"] = "image"  # for pyvis
         data["country"] = country
+        data["color"] = data.get("color", hashcolor(data.get(NODE_COLOR_FIELD, ip)))
         if not data.get("image", False):
             data["image"] = geticon(data.get("gson", dict()))
         try:
@@ -138,6 +140,8 @@ def graph_upsert(ip, G, **data):
                 G.nodes.get(ip)[k] = data[k]
         image = G.nodes.get(ip)["image"]
         G.nodes.get(ip)["image"] = geticon(data.get("gson", dict()), default=image)
+        if data.get("color", False):
+            G.nodes.get(ip)["color"] = data["color"]
     if VERBOSE:
         print(f"insert {ip}")
 
@@ -163,15 +167,23 @@ def graph_edge_upsert(cli, srv, G, **data):
             if not edge.get(k, False):
                 G.edges.get((cli, srv))[k] = data[k]
     G.edges.get((cli, srv))["weight"] = G.get_edge_data(cli, srv, {}).get(
-        "weight", 1 / (data.get("dist") + 1)
+        "weight", 1 / (data.get("dist", 20) + 1)
     )
 
 
-def hashcolor(strr):
+def hashtrans(tup, trans=(0, 0, 0)):
+    tupo = ()
+    for t in range(3):
+        tupo = tupo + ((tup[t] + trans[t]) % 255,)
+    return tupo
+
+
+def hashcolor(strr, trans=(0, 0, 0)):
     r = strr.__hash__() % 255
     g = (strr.__hash__() >> 8) % 255
     b = (strr.__hash__() >> 16) % 255
-    return "#%02x%02x%02x" % (r, g, b)
+    out = hashtrans((r, g, b), trans=trans)
+    return "#%02x%02x%02x" % out
 
 
 def openarp():
@@ -250,8 +262,17 @@ def rm_edge(ip1, ip2):
 
 def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
     global traceroute_counter
+
     traceroute_counter = traceroute_counter + 1
-    upsert(Tip, G, group=f"traceroute{traceroute_counter}")
+    upsert(
+        Tip,
+        G,
+        color=hashcolor(
+            "traceroute_TARGET", trans=(0, traceroute_counter * 30 % 255, 0)
+        ),
+        group=f"traceroute{traceroute_counter}",
+        size=1,
+    )
     print("traceroute ", Tip, "port ", port)
     if port:
         cmd = f"sudo traceroute -n -m {maxhops} -T -p {port} {Tip}"
@@ -261,6 +282,7 @@ def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
     time.sleep(timeout)
     tr.kill()
     lines = tr.stdout.readlines()
+    hops_traject = lines[1::]
     lastips = [myip]
     lastrealip = myip
     if len(lines) >= maxhops and lines[-1].find(Tip) == -1:
@@ -268,8 +290,13 @@ def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
         return
     rm_edge(Tip, myip)
     # rm_edge(Tip, gw)
-    for jj, l in enumerate(lines[1::]):
+    Nhops = len(hops_traject)
+    for jj, l in enumerate(hops_traject):
         ips = re.findall(" (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ", l)
+        next_ips = re.findall(
+            " (\d{0,3}\.\d{0,3}\.\d{0,3}\.\d{0,3}) ",
+            hops_traject[min(jj + 1, Nhops - 1)],
+        )
         if len(ips) > 0:
             if VERBOSE:
                 print(ips)
@@ -306,7 +333,7 @@ def traceroute(Tip, G, port=False, timeout=5, maxhops=30):
                     )
         else:
             ip = "??" + hex(
-                (str(Tip.split(".")[0:2]) + str(lastips)).__hash__() % (256**4)
+                (str(next_ips.sort()) + str(lastips.sort())).__hash__() % (256**4)
             )
             upsert(
                 ip,
@@ -338,6 +365,8 @@ upsert(
     label="me",
     group="arp_active",
     image=geticon(dict(), name="james"),
+    color=hashcolor("myip", trans=(0, 122, 50)),
+    size=2,
 )
 upsert(
     gw,
@@ -345,8 +374,17 @@ upsert(
     label="gateway",
     group="arp_active",
     image=geticon(dict(), name="cisco"),
+    color=hashcolor("gateway"),
+    size=2,
 )
-edge_upsert(myip, gw, G, group="arp", label="default", dist=1)
+edge_upsert(
+    myip,
+    gw,
+    G,
+    group="arp",
+    label="default",
+    dist=1,
+)
 edge_upsert(gw, myip, G, group="arp", label="default", dist=1)
 arp = os.popen("arp -na -i %s" % (IFACE,))
 stub = []
@@ -738,6 +776,12 @@ class tkGraph:
                 print("error in step 2 of layout", e)
         colors = []
         colors2 = []
+        ncolors = []
+        nsize = []
+        for n in G.nodes():
+            ncolors.append(self.G.nodes.get(n)["color"])
+            spl = self.G.nodes.get(n).get("size", 0)
+            nsize.append(NODE_SIZE + int(spl * NODE_SIZE))
         if not MAP:
             self.fig.set_size_inches(10, 10)
         for e in self.G.edges:
@@ -748,7 +792,8 @@ class tkGraph:
         nx.draw_networkx(
             self.G,
             pos=pos,
-            node_size=10,
+            node_size=nsize,
+            node_color=ncolors,
             width=2,
             alpha=0.5,
             ax=self.ax,
