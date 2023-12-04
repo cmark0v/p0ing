@@ -64,6 +64,7 @@ TKINT = env(True)
 REPLOT = int(os.getenv("REPLOT", 2))  # how often to read buffer and refresh
 LABELS = env(True)  # how often to read buffer and refresh
 ICONS = env(True)  # how often to read buffer and refresh
+FLAGS = env(True)  # how often to read buffer and refresh
 TCPDUMP = env(True)  # how often to read buffer and refresh
 PASSIVE_ARP = env(True)  # how often to read buffer and refresh
 EDGE_LABELS = env(True)  # how often to read buffer and refresh
@@ -576,7 +577,14 @@ class tkGraph:
             command=self.edge_labelflip,
         )
         self.edge_label_button.place(relx=0.025, rely=VCTL_SPACE + 4 * bdiff)
-
+        self.flag_button = ctk.CTkButton(
+            master=self.root,
+            text="Toggle flags",
+            width=200,
+            height=50,
+            command=self.flag_flip,
+        )
+        self.flag_button.place(relx=0.025, rely=VCTL_SPACE + 2 * bdiff)
         self.icon_button = ctk.CTkButton(
             master=self.root,
             text="Toggle icons",
@@ -732,6 +740,10 @@ class tkGraph:
             upsert(host, self.G)
             port = self.G.nodes.get(host).get("port", False)
         traceroute(host, self.G, port=port)
+    def flag_flip(self):
+        global FLAGS
+        FLAGS = FLAGS ^ True
+        self.update_window()
 
     def icon_flip(self):
         global ICONS
@@ -819,7 +831,7 @@ class tkGraph:
                 ]
             )
             nx.draw_networkx_edge_labels(G, pos, edge_labels)
-        if not MAP and ICONS:
+        if not MAP and ICONS or FLAGS:
             tr_figure = self.ax.transData.transform
             # Transform from display to figure coordinates
             tr_axes = self.fig.transFigure.inverted().transform
@@ -834,26 +846,28 @@ class tkGraph:
                     pos[n],
                 )
                 xa, ya = tr_axes((xf, yf))
-                a = plt.axes(
-                    [
-                        xa - icon_center,
-                        ya + icon_size / 2 - icon_center,
-                        icon_size,
-                        icon_size,
-                    ]
-                )
-                a.imshow(flag.convert("RGB"), zorder=1)
-                a.axis("off")
-                a = plt.axes(
-                    [
-                        xa - icon_center,
-                        ya + icon_size - icon_center,
-                        icon_size,
-                        icon_size,
-                    ]
-                )
-                a.imshow(icon.convert("RGBA"), zorder=1)
-                a.axis("off")
+                if FLAGS:
+                    a = plt.axes(
+                        [
+                            xa - icon_center,
+                            ya - icon_center,
+                            icon_size,
+                            icon_size,
+                        ]
+                    )
+                    a.imshow(flag.convert("RGB"), zorder=1)
+                    a.axis("off")
+                if ICONS:
+                    a = plt.axes(
+                        [
+                            xa - icon_center,
+                            ya + icon_size - icon_center,
+                            icon_size,
+                            icon_size,
+                        ]
+                    )
+                    a.imshow(icon.convert("RGBA"), zorder=1)
+                    a.axis("off")
         self.ax.axis("off")
         canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         canvas.draw()
