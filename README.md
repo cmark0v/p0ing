@@ -28,6 +28,7 @@ pip install basemap
 pip install pyvis
 pip install jsonofabitch
 pip install geopy
+pip install enviscerate
 ```
 
 if you want to use geolocation data, it currently uses ipinfo.io api which is not free but not expensive. its not mandatory. it also makes use of local geoiplookup which generates no traffic(all default config is passive) but is not as accurate. I am sure there are other resources that would work well. anything that gives latt/long GPS coordinates from an IP will work with the geopy plots.
