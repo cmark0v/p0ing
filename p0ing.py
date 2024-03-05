@@ -779,7 +779,7 @@ class tkGraph:
                 pos = nx.spring_layout(self.G, iterations=50)
         else:
             print("no layout 1")
-        if layout2 != None:
+        if layout2 != "none":
             try:
                 opts2 = json.loads(self.layout_input_opts2.get())
                 opts2["pos"] = pos
@@ -831,7 +831,7 @@ class tkGraph:
                 ]
             )
             nx.draw_networkx_edge_labels(G, pos, edge_labels)
-        if not MAP and ICONS or FLAGS:
+        if not MAP and (ICONS or FLAGS):
             tr_figure = self.ax.transData.transform
             # Transform from display to figure coordinates
             tr_axes = self.fig.transFigure.inverted().transform
@@ -855,7 +855,7 @@ class tkGraph:
                             icon_size,
                         ]
                     )
-                    a.imshow(flag.convert("RGB"), zorder=1)
+                    a.imshow(flag.convert("RGBA"), zorder=1)
                     a.axis("off")
                 if ICONS:
                     a = plt.axes(
